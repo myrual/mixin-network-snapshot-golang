@@ -150,8 +150,8 @@ func create_task(asset_id string, start_time2 time.Time, end_time2 time.Time, c 
 }
 
 func main() {
-	var start_time2 = time.Date(2018, 4, 11, 0, 0, 0, 0, time.UTC)
-	var end_time2 = time.Date(2018, 4, 12, 0, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2018, 8, 11, 0, 0, 0, 0, time.UTC)
+	var end_time2 = time.Date(2018, 8, 12, 0, 0, 0, 0, time.UTC)
 	var snaps_chan = make(chan *Snapshot)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int)
@@ -174,7 +174,7 @@ func main() {
 			if v.error_value != nil {
 				log.Println(v.error_value)
 			}
-			log.Println(v.lastest_scanned_time, "Finished")
+			log.Println(v.lastest_scanned_time, " scanned")
 		case task := <-task_chan:
 			log.Println(task.start_t, task.end_t)
 			go searchSnapshot(task.asset_id, task.start_t, task.end_t, snaps_chan, result_chan, progress_chan, user_config)
