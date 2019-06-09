@@ -48,19 +48,18 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan *Snapshot, status_chan chan ScanProgress, config BotConfig) {
+func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan *Snapshot, result_chan chan SearchResult, progress_chan chan ScanProgress, config BotConfig) {
 	var start_time = start_t
-	log.Println(start_t, end_t)
 	for {
 
 		snaps, err := mixin.NetworkSnapshots(asset_id, start_time, true, 500, config.user_id, config.session_id, config.private_key)
 
 		if err != nil {
 			var errorStatus = ScanProgress{
-				error_value:        err,
-				error_stopped_time: start_time,
+				error_value: err,
 			}
-			status_chan <- errorStatus
+			progress_chan <- errorStatus
+			time.Sleep(10)
 			continue
 		}
 
@@ -71,10 +70,13 @@ func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan 
 		err = json.Unmarshal(snaps, &resp)
 
 		if err != nil {
-			var errorStatus = ScanProgress{
+			progress_chan <- ScanProgress{
 				error_value: err,
 			}
-			status_chan <- errorStatus
+			result_chan <- SearchResult{
+				error_value:        err,
+				error_stopped_time: start_time,
+			}
 			return
 		}
 
@@ -86,22 +88,26 @@ func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan 
 
 		lastElement := resp.Data[len(resp.Data)-1]
 		for _, v := range resp.Data {
-			c <- v
+			if v.CreatedAt.Before(end_t) {
+				c <- v
+			} else {
+				break
+			}
+		}
+
+		progress_chan <- ScanProgress{
+			lastest_scanned_time: lastElement.CreatedAt,
+			start_t:              start_t,
+			asset_id:             asset_id,
 		}
 
 		if lastElement.CreatedAt.After(end_t) {
-			var scanStatus = ScanProgress{
+			result_chan <- SearchResult{
+				asset_id:             asset_id,
+				start_t:              start_t,
 				lastest_scanned_time: lastElement.CreatedAt,
-				scanFinished:         true,
 			}
-			status_chan <- scanStatus
 			return
-		} else {
-			var scanStatus = ScanProgress{
-				lastest_scanned_time: lastElement.CreatedAt,
-				scanFinished:         false,
-			}
-			status_chan <- scanStatus
 		}
 		start_time = lastElement.CreatedAt
 	}
@@ -113,43 +119,30 @@ type Searchtask struct {
 	asset_id string
 }
 
-type ScanProgress struct {
+type SearchResult struct {
+	start_t              time.Time
+	asset_id             string
 	lastest_scanned_time time.Time
-	scanFinished         bool
 	error_value          error
 	error_stopped_time   time.Time
 }
 
-func taskReceiver(task_c chan Searchtask, result_c chan *Snapshot, quit_c chan int, status_c chan ScanProgress, config BotConfig) {
-	for {
-		select {
-		case task := <-task_c:
-			fmt.Println(task.start_t)
-			go searchSnapshot("c6d0c728-2624-429b-8e0d-d9d19b6592fa", task.start_t, task.end_t, result_c, status_c, config)
-		case <-quit_c:
-			return
-		}
-	}
-}
-func snapReceiver(result_c chan *Snapshot, quit_c chan int) {
-	for {
-		select {
-		case <-result_c:
-
-		case <-quit_c:
-			return
-		}
-	}
+type ScanProgress struct {
+	lastest_scanned_time time.Time
+	start_t              time.Time
+	asset_id             string
+	error_value          error
 }
 
-func create_task(start_time2 time.Time, end_time2 time.Time, c chan Searchtask, duration int) {
+func create_task(asset_id string, start_time2 time.Time, end_time2 time.Time, c chan Searchtask, duration int) {
 	var i int = 0
 	for {
 		this_start := start_time2.Add(time.Minute * time.Duration(duration*i))
 		this_end := this_start.Add(time.Minute * time.Duration(duration))
 		if end_time2.After(this_end) {
-			c <- Searchtask{start_t: this_start, end_t: this_end}
+			c <- Searchtask{start_t: this_start, end_t: this_end, asset_id: asset_id}
 		} else {
+			c <- Searchtask{start_t: this_start, end_t: end_time2, asset_id: asset_id}
 			break
 		}
 		i += 1
@@ -157,12 +150,13 @@ func create_task(start_time2 time.Time, end_time2 time.Time, c chan Searchtask, 
 }
 
 func main() {
-	var start_time2 = time.Date(2018, 8, 11, 0, 0, 0, 0, time.UTC)
-	var end_time2 = time.Date(2018, 8, 13, 0, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2018, 4, 11, 0, 0, 0, 0, time.UTC)
+	var end_time2 = time.Date(2018, 4, 12, 0, 0, 0, 0, time.UTC)
 	var snaps_chan = make(chan *Snapshot)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int)
-	var status_chan = make(chan ScanProgress, 10)
+	var progress_chan = make(chan ScanProgress, 10)
+	var result_chan = make(chan SearchResult, 10)
 
 	var user_config = BotConfig{
 		user_id:     userid,
@@ -170,31 +164,35 @@ func main() {
 		private_key: private_key,
 	}
 
-	create_task(start_time2, end_time2, task_chan, 720)
+	create_task("43d61dcd-e413-450d-80b8-101d5e903357", start_time2, end_time2, task_chan, 480)
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
+	total_snaps := 0
 	for {
 		select {
-		case v := <-status_chan:
+		case v := <-progress_chan:
 			if v.error_value != nil {
 				log.Println(v.error_value)
 			}
-			if v.scanFinished == true {
-				log.Println(v.lastest_scanned_time, "Finished")
-				log.Println("go with ", len(task_chan), " tasks")
-				total_task -= 1
-				if total_task == 0 {
-					log.Println("all job finished")
-					return
-				}
-			}
+			log.Println(v.lastest_scanned_time, "Finished")
 		case task := <-task_chan:
 			log.Println(task.start_t, task.end_t)
-			go searchSnapshot("c6d0c728-2624-429b-8e0d-d9d19b6592fa", task.start_t, task.end_t, snaps_chan, status_chan, user_config)
+			go searchSnapshot(task.asset_id, task.start_t, task.end_t, snaps_chan, result_chan, progress_chan, user_config)
 		case <-snaps_chan:
-
+			total_snaps += 1
 		case <-quit_chan:
 			return
+		case v := <-result_chan:
+			if v.error_value != nil {
+				log.Printf("search asset id %s stop at %v because %v", v.asset_id, v.error_stopped_time, v.error_value)
+			} else {
+				log.Printf("search asset id %s success start at  %v, last scan at %v", v.asset_id, v.start_t, v.lastest_scanned_time)
+			}
+			total_task -= 1
+			if total_task == 0 {
+				log.Println("all task finished", " total ", total_snaps, " snaps")
+				return
+			}
 		}
 	}
 }
