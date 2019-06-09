@@ -48,12 +48,12 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(start_t time.Time, end_t time.Time, c chan *Snapshot, status_chan chan ScanProgress, config BotConfig) {
+func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan *Snapshot, status_chan chan ScanProgress, config BotConfig) {
 	var start_time = start_t
 	log.Println(start_t, end_t)
 	for {
 
-		snaps, err := mixin.NetworkSnapshots("", start_time, true, 500, config.user_id, config.session_id, config.private_key)
+		snaps, err := mixin.NetworkSnapshots(asset_id, start_time, true, 500, config.user_id, config.session_id, config.private_key)
 
 		if err != nil {
 			var errorStatus = ScanProgress{
@@ -61,7 +61,7 @@ func searchSnapshot(start_t time.Time, end_t time.Time, c chan *Snapshot, status
 				error_stopped_time: start_time,
 			}
 			status_chan <- errorStatus
-			return
+			continue
 		}
 
 		var resp struct {
@@ -88,15 +88,21 @@ func searchSnapshot(start_t time.Time, end_t time.Time, c chan *Snapshot, status
 		for _, v := range resp.Data {
 			c <- v
 		}
-		var scanStatus = ScanProgress{
-			lastest_scanned_time: lastElement.CreatedAt,
-			status:               true,
-		}
-		status_chan <- scanStatus
+
 		if lastElement.CreatedAt.After(end_t) {
+			var scanStatus = ScanProgress{
+				lastest_scanned_time: lastElement.CreatedAt,
+				scanFinished:         true,
+			}
+			status_chan <- scanStatus
 			return
+		} else {
+			var scanStatus = ScanProgress{
+				lastest_scanned_time: lastElement.CreatedAt,
+				scanFinished:         false,
+			}
+			status_chan <- scanStatus
 		}
-		fmt.Println(lastElement.CreatedAt)
 		start_time = lastElement.CreatedAt
 	}
 }
@@ -109,7 +115,7 @@ type Searchtask struct {
 
 type ScanProgress struct {
 	lastest_scanned_time time.Time
-	status               bool
+	scanFinished         bool
 	error_value          error
 	error_stopped_time   time.Time
 }
@@ -119,7 +125,7 @@ func taskReceiver(task_c chan Searchtask, result_c chan *Snapshot, quit_c chan i
 		select {
 		case task := <-task_c:
 			fmt.Println(task.start_t)
-			go searchSnapshot(task.start_t, task.end_t, result_c, status_c, config)
+			go searchSnapshot("c6d0c728-2624-429b-8e0d-d9d19b6592fa", task.start_t, task.end_t, result_c, status_c, config)
 		case <-quit_c:
 			return
 		}
@@ -136,9 +142,8 @@ func snapReceiver(result_c chan *Snapshot, quit_c chan int) {
 	}
 }
 
-func create_task(start_time2 time.Time, end_time2 time.Time, c chan Searchtask) {
+func create_task(start_time2 time.Time, end_time2 time.Time, c chan Searchtask, duration int) {
 	var i int = 0
-	const duration int = 720
 	for {
 		this_start := start_time2.Add(time.Minute * time.Duration(duration*i))
 		this_end := this_start.Add(time.Minute * time.Duration(duration))
@@ -155,7 +160,7 @@ func main() {
 	var start_time2 = time.Date(2018, 8, 11, 0, 0, 0, 0, time.UTC)
 	var end_time2 = time.Date(2018, 8, 13, 0, 0, 0, 0, time.UTC)
 	var snaps_chan = make(chan *Snapshot)
-	var task_chan = make(chan Searchtask, 10)
+	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int)
 	var status_chan = make(chan ScanProgress, 10)
 
@@ -165,19 +170,31 @@ func main() {
 		private_key: private_key,
 	}
 
-	go create_task(start_time2, end_time2, task_chan)
-	go taskReceiver(task_chan, snaps_chan, quit_chan, status_chan, user_config)
-	go snapReceiver(snaps_chan, quit_chan)
-	fmt.Println("wait")
+	create_task(start_time2, end_time2, task_chan, 720)
+	total_task := len(task_chan)
+	log.Println("go with ", total_task, " tasks")
 	for {
 		select {
 		case v := <-status_chan:
 			if v.error_value != nil {
 				log.Println(v.error_value)
 			}
-			if v.status == true {
-				log.Println(v.lastest_scanned_time)
+			if v.scanFinished == true {
+				log.Println(v.lastest_scanned_time, "Finished")
+				log.Println("go with ", len(task_chan), " tasks")
+				total_task -= 1
+				if total_task == 0 {
+					log.Println("all job finished")
+					return
+				}
 			}
+		case task := <-task_chan:
+			log.Println(task.start_t, task.end_t)
+			go searchSnapshot("c6d0c728-2624-429b-8e0d-d9d19b6592fa", task.start_t, task.end_t, snaps_chan, status_chan, user_config)
+		case <-snaps_chan:
+
+		case <-quit_chan:
+			return
 		}
 	}
 }
