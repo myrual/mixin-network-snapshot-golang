@@ -50,12 +50,12 @@ type BotConfig struct {
 
 func searchSnapshot(start_t time.Time, end_t time.Time, c chan *Snapshot, status_chan chan ScanProgress, config BotConfig) {
 	var start_time = start_t
+	log.Println(start_t, end_t)
 	for {
 
 		snaps, err := mixin.NetworkSnapshots("", start_time, true, 500, config.user_id, config.session_id, config.private_key)
 
 		if err != nil {
-			fmt.Println("error")
 			var errorStatus = ScanProgress{
 				error_value:        err,
 				error_stopped_time: start_time,
@@ -71,7 +71,10 @@ func searchSnapshot(start_t time.Time, end_t time.Time, c chan *Snapshot, status
 		err = json.Unmarshal(snaps, &resp)
 
 		if err != nil {
-			fmt.Println("error json")
+			var errorStatus = ScanProgress{
+				error_value: err,
+			}
+			status_chan <- errorStatus
 			return
 		}
 
@@ -115,8 +118,8 @@ func taskReceiver(task_c chan Searchtask, result_c chan *Snapshot, quit_c chan i
 	for {
 		select {
 		case task := <-task_c:
-			go searchSnapshot(task.start_t, task.end_t, result_c, status_c, config)
 			fmt.Println(task.start_t)
+			go searchSnapshot(task.start_t, task.end_t, result_c, status_c, config)
 		case <-quit_c:
 			return
 		}
@@ -133,9 +136,22 @@ func snapReceiver(result_c chan *Snapshot, quit_c chan int) {
 	}
 }
 
+func create_task(start_time2 time.Time, end_time2 time.Time, c chan Searchtask) {
+	var i int = 0
+	const duration int = 720
+	for {
+		this_start := start_time2.Add(time.Minute * time.Duration(duration*i))
+		this_end := this_start.Add(time.Minute * time.Duration(duration))
+		if end_time2.After(this_end) {
+			c <- Searchtask{start_t: this_start, end_t: this_end}
+		} else {
+			break
+		}
+		i += 1
+	}
+}
+
 func main() {
-	var start_time = time.Date(2017, 12, 24, 0, 0, 0, 0, time.UTC)
-	var end_time = time.Date(2018, 1, 24, 0, 0, 0, 0, time.UTC)
 	var start_time2 = time.Date(2018, 8, 11, 0, 0, 0, 0, time.UTC)
 	var end_time2 = time.Date(2018, 8, 13, 0, 0, 0, 0, time.UTC)
 	var snaps_chan = make(chan *Snapshot)
@@ -149,15 +165,19 @@ func main() {
 		private_key: private_key,
 	}
 
+	go create_task(start_time2, end_time2, task_chan)
 	go taskReceiver(task_chan, snaps_chan, quit_chan, status_chan, user_config)
 	go snapReceiver(snaps_chan, quit_chan)
-	task_chan <- Searchtask{start_t: start_time, end_t: end_time, asset_id: ""}
-	task_chan <- Searchtask{start_t: start_time2, end_t: end_time2, asset_id: ""}
 	fmt.Println("wait")
 	for {
 		select {
 		case v := <-status_chan:
-			log.Println(v)
+			if v.error_value != nil {
+				log.Println(v.error_value)
+			}
+			if v.status == true {
+				log.Println(v.lastest_scanned_time)
+			}
 		}
 	}
 }
