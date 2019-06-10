@@ -110,7 +110,7 @@ type MixinResponse struct {
 }
 
 func main() {
-	var start_time2 = time.Date(2018, 4, 1, 0, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2018, 4, 25, 0, 0, 0, 0, time.UTC)
 	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int, 2)
@@ -148,7 +148,7 @@ func main() {
 					for _, v := range v.MixinRespone.Data {
 						if v.UserId != "" {
 							log.Println("---------------")
-							log.Println(v.SnapshotId, v.UserId, v.OpponentId)
+							log.Println(v.SnapshotId, " me ", v.UserId, " opp ", v.OpponentId, " amount ", v.Amount)
 						}
 					}
 					len_of_snap := len(v.MixinRespone.Data)
