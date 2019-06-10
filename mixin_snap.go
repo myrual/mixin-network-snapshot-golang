@@ -76,6 +76,7 @@ func searchSnapshot(task Searchtask, result_chan chan SnapNetResponse, config Bo
 
 type Searchtask struct {
 	start_t  time.Time
+	end_t    time.Time
 	max_len  int
 	asset_id string
 }
@@ -111,7 +112,6 @@ type MixinResponse struct {
 
 func main() {
 	var start_time2 = time.Date(2019, 6, 1, 0, 0, 0, 0, time.UTC)
-	var end_time2 = time.Date(2019, 6, 2, 0, 0, 0, 0, time.UTC)
 	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int, 2)
@@ -123,8 +123,9 @@ func main() {
 	}
 	task_chan <- Searchtask{
 		start_t:  start_time2,
+		end_t:    start_time2.AddDate(0, 0, 1),
 		max_len:  500,
-		asset_id: EOS_ASSET_ID,
+		asset_id: USDT_ASSET_ID,
 	}
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
@@ -150,13 +151,14 @@ func main() {
 						log.Println("no enough record to search, pause")
 						break
 					} else {
-						if last_element.CreatedAt.After(end_time2) {
-							log.Println("reach ", end_time2)
+						if last_element.CreatedAt.After(v.MixinReq.end_t) {
+							log.Println("reach ", v.MixinReq.end_t)
 							log.Println("total ", time.Now().Sub(now), " passed")
 							return
 						}
 						task_chan <- Searchtask{
 							start_t:  last_element.CreatedAt,
+							end_t:    v.MixinReq.end_t,
 							asset_id: v.MixinReq.asset_id,
 							max_len:  v.MixinReq.max_len,
 						}
