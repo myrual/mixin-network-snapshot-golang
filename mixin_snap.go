@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
@@ -48,105 +47,37 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(asset_id string, start_t time.Time, end_t time.Time, c chan *Snapshot, result_chan chan SearchResult, progress_chan chan ScanProgress, config BotConfig) {
-	var start_time = start_t
-	for {
+func searchSnapshot(task Searchtask, result_chan chan SnapNetResponse, config BotConfig) {
+	snaps, err := mixin.NetworkSnapshots(task.asset_id, task.start_t, true, task.max_len, config.user_id, config.session_id, config.private_key)
 
-		snaps, err := mixin.NetworkSnapshots(asset_id, start_time, true, 500, config.user_id, config.session_id, config.private_key)
-
-		if err != nil {
-			var errorStatus = ScanProgress{
-				error_value: err,
-			}
-			progress_chan <- errorStatus
-			time.Sleep(10)
-			continue
+	if err != nil {
+		result_chan <- SnapNetResponse{
+			Error:    err,
+			MixinReq: task,
 		}
+		return
+	}
 
-		var resp struct {
-			Data  []*Snapshot `json:"data"`
-			Error string      `json:"error"`
-		}
-		err = json.Unmarshal(snaps, &resp)
+	var resp MixinResponse
+	err = json.Unmarshal(snaps, &resp)
 
-		if err != nil {
-			progress_chan <- ScanProgress{
-				error_value: err,
-			}
-			result_chan <- SearchResult{
-				error_value:        err,
-				error_stopped_time: start_time,
-			}
-			return
+	if err != nil {
+		result_chan <- SnapNetResponse{
+			Error:    err,
+			MixinReq: task,
 		}
-
-		if resp.Error != "" {
-			fmt.Println("error in result")
-			log.Fatal("read snapshot error", resp.Error)
-			return
-		}
-
-		lastElement := resp.Data[len(resp.Data)-1]
-		for _, v := range resp.Data {
-			if v.CreatedAt.Before(end_t) {
-				c <- v
-			} else {
-				break
-			}
-		}
-
-		progress_chan <- ScanProgress{
-			lastest_scanned_time: lastElement.CreatedAt,
-			start_t:              start_t,
-			asset_id:             asset_id,
-		}
-
-		if lastElement.CreatedAt.After(end_t) {
-			result_chan <- SearchResult{
-				asset_id:             asset_id,
-				start_t:              start_t,
-				lastest_scanned_time: lastElement.CreatedAt,
-			}
-			return
-		}
-		start_time = lastElement.CreatedAt
+		return
+	}
+	result_chan <- SnapNetResponse{
+		MixinRespone: resp,
+		MixinReq:     task,
 	}
 }
 
 type Searchtask struct {
 	start_t  time.Time
-	end_t    time.Time
+	max_len  int
 	asset_id string
-}
-
-type SearchResult struct {
-	start_t              time.Time
-	asset_id             string
-	lastest_scanned_time time.Time
-	error_value          error
-	error_stopped_time   time.Time
-}
-
-type ScanProgress struct {
-	lastest_scanned_time time.Time
-	start_t              time.Time
-	asset_id             string
-	error_value          error
-}
-
-func create_task(asset_id string, start_time2 time.Time, end_time2 time.Time, c chan Searchtask, duration int) {
-	var i int = 0
-	for {
-		this_start := start_time2.Add(time.Minute * time.Duration(duration*i))
-		this_end := this_start.Add(time.Minute * time.Duration(duration))
-		if end_time2.After(this_end) {
-			c <- Searchtask{start_t: this_start, end_t: this_end, asset_id: asset_id}
-		} else {
-			c <- Searchtask{start_t: this_start, end_t: end_time2, asset_id: asset_id}
-			break
-		}
-		i += 1
-	}
 }
 
 const (
@@ -167,50 +98,67 @@ const (
 	XIN_ASSET_ID  = "c94ac88f-4671-3976-b60a-09064f1811e8"
 )
 
+type SnapNetResponse struct {
+	Error        error
+	MixinReq     Searchtask
+	MixinRespone MixinResponse
+}
+
+type MixinResponse struct {
+	Data  []*Snapshot `json:"data"`
+	Error string      `json:"error"`
+}
+
 func main() {
-	var start_time2 = time.Date(2018, 8, 11, 0, 0, 0, 0, time.UTC)
-	var end_time2 = time.Date(2018, 8, 12, 0, 0, 0, 0, time.UTC)
-	var snaps_chan = make(chan *Snapshot)
+	var start_time2 = time.Date(2019, 5, 11, 0, 0, 0, 0, time.UTC)
+	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
-	var quit_chan = make(chan int)
-	var progress_chan = make(chan ScanProgress, 10)
-	var result_chan = make(chan SearchResult, 10)
+	var quit_chan = make(chan int, 2)
 
 	var user_config = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
 		private_key: private_key,
 	}
-
-	create_task(BTC_ASSET_ID, start_time2, end_time2, task_chan, 480)
+	task_chan <- Searchtask{
+		start_t:  start_time2,
+		max_len:  500,
+		asset_id: LTC_ASSET_ID,
+	}
+	task_chan <- Searchtask{
+		start_t:  start_time2,
+		max_len:  500,
+		asset_id: DOGE_ASSET_ID,
+	}
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
-	total_snaps := 0
 	for {
 		select {
-		case v := <-progress_chan:
-			if v.error_value != nil {
-				log.Println(v.error_value)
-			}
-			log.Println(v.lastest_scanned_time, " scanned")
 		case task := <-task_chan:
-			log.Println(task.start_t, task.end_t)
-			go searchSnapshot(task.asset_id, task.start_t, task.end_t, snaps_chan, result_chan, progress_chan, user_config)
-		case <-snaps_chan:
-			total_snaps += 1
-		case <-quit_chan:
-			return
-		case v := <-result_chan:
-			if v.error_value != nil {
-				log.Printf("search asset id %s stop at %v because %v", v.asset_id, v.error_stopped_time, v.error_value)
+			log.Println(task.start_t, task.max_len, " for ", task.asset_id)
+			go searchSnapshot(task, network_result_chan, user_config)
+
+		case v := <-network_result_chan:
+			if v.Error != nil {
+				log.Println("Net work error ", v.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
 			} else {
-				log.Printf("search asset id %s success start at  %v, last scan at %v", v.asset_id, v.start_t, v.lastest_scanned_time)
+				if v.MixinRespone.Error != "" {
+					log.Println("Server return error", v.MixinRespone.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
+				} else {
+					len_of_snap := len(v.MixinRespone.Data)
+					log.Println("len of snap:", len_of_snap, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
+					last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
+					log.Println("the last element is created at:", last_element.CreatedAt)
+				}
 			}
 			total_task -= 1
 			if total_task == 0 {
-				log.Println("all task finished", " total ", total_snaps, " snaps")
-				return
+				log.Println("finish all search")
+				quit_chan <- 0
 			}
+
+		case <-quit_chan:
+			return
 		}
 	}
 }
