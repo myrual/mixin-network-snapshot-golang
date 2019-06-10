@@ -78,6 +78,10 @@ type Searchtask struct {
 	max_len         int
 	asset_id        string
 }
+type Searchprogress struct {
+	ongoing        bool
+	last_scan_time time.Time
+}
 
 const (
 	BTC_ASSET_ID  = "c6d0c728-2624-429b-8e0d-d9d19b6592fa"
@@ -109,10 +113,69 @@ type MixinResponse struct {
 	Error string      `json:"error"`
 }
 
+func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress, quit_c chan int) {
+	var task_chan = make(chan Searchtask, 100)
+	var network_result_chan = make(chan SnapNetResponse, 100)
+
+	task_chan <- req_task
+	now := time.Now()
+	for {
+		select {
+		case task := <-task_chan:
+			go searchSnapshot(task.asset_id, task.start_t, task.yesterday2today, task.max_len, network_result_chan, user_config)
+
+		case v := <-network_result_chan:
+			if v.Error != nil {
+				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+				task_chan <- req_task
+			} else {
+				if v.MixinRespone.Error != "" {
+					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+					return
+				} else {
+					for _, v := range v.MixinRespone.Data {
+						if v.UserId != "" {
+							result_chan <- v
+						}
+					}
+					len_of_snap := len(v.MixinRespone.Data)
+					if len_of_snap == 0 {
+						time.Sleep(60 * time.Second)
+						task_chan <- req_task
+					} else {
+						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
+						progress := Searchprogress{
+							last_scan_time: last_element.CreatedAt,
+						}
+						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
+							log.Println("reach ", req_task.end_t)
+							log.Println("total ", time.Now().Sub(now), " passed")
+							progress.ongoing = false
+							progress_chan <- progress
+							return
+						}
+						progress.ongoing = true
+						progress_chan <- progress
+
+						if len_of_snap < req_task.max_len {
+							log.Println("data len is ", len_of_snap)
+							time.Sleep(60 * time.Second)
+						}
+						req_task.start_t = last_element.CreatedAt
+						task_chan <- req_task
+					}
+				}
+			}
+		case <-quit_c:
+			return
+		}
+	}
+}
+
 func main() {
 	var start_time2 = time.Date(2018, 4, 25, 0, 0, 0, 0, time.UTC)
-	var network_result_chan = make(chan SnapNetResponse, 100)
-	var task_chan = make(chan Searchtask, 100)
+	var my_snapshot_chan = make(chan *Snapshot, 100)
+	var progress_chan = make(chan Searchprogress, 100)
 	var quit_chan = make(chan int, 2)
 
 	var user_config = BotConfig{
@@ -127,53 +190,22 @@ func main() {
 		yesterday2today: true,
 		asset_id:        CNB_ASSET_ID,
 	}
-	task_chan <- req_task
-	total_task := len(task_chan)
-	log.Println("go with ", total_task, " tasks")
-	now := time.Now()
-	total_cnb := 0
+	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, quit_chan)
+	total_found_snap := 0
 	for {
 		select {
-		case task := <-task_chan:
-			log.Println(req_task.start_t, req_task.max_len, " for ", task.asset_id, " total my cnb tran", total_cnb)
-			go searchSnapshot(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, network_result_chan, user_config)
-
-		case v := <-network_result_chan:
-			if v.Error != nil {
-				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-				task_chan <- req_task
-			} else {
-				if v.MixinRespone.Error != "" {
-					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-					return
-				} else {
-					for _, v := range v.MixinRespone.Data {
-						if v.UserId != "" {
-
-						}
-					}
-					len_of_snap := len(v.MixinRespone.Data)
-					if len_of_snap == 0 {
-						time.Sleep(60 * time.Second)
-						task_chan <- req_task
-					} else {
-						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
-						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
-							log.Println("reach ", req_task.end_t)
-							log.Println("total ", time.Now().Sub(now), " passed")
-							return
-						}
-						if len_of_snap < req_task.max_len {
-							log.Println("data len is ", len_of_snap)
-							time.Sleep(60 * time.Second)
-						}
-						req_task.start_t = last_element.CreatedAt
-						task_chan <- req_task
-					}
-				}
+		case progress_v := <-progress_chan:
+			log.Println(progress_v.last_scan_time)
+			if progress_v.ongoing == false {
+				quit_chan <- 1
 			}
-
+		case v := <-my_snapshot_chan:
+			total_found_snap += 1
+			if total_found_snap%100 == 0 {
+				log.Println(total_found_snap, v.SnapshotId, v.CreatedAt)
+			}
 		case <-quit_chan:
+			log.Println("finished")
 			return
 		}
 	}
