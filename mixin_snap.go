@@ -81,6 +81,7 @@ type Searchtask struct {
 type Searchprogress struct {
 	ongoing        bool
 	last_scan_time time.Time
+	asset_id       string
 }
 
 const (
@@ -146,6 +147,7 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
 						progress := Searchprogress{
 							last_scan_time: last_element.CreatedAt,
+							asset_id:       req_task.asset_id,
 						}
 						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
 							log.Println("reach ", req_task.end_t)
@@ -195,7 +197,7 @@ func main() {
 	for {
 		select {
 		case progress_v := <-progress_chan:
-			log.Println(progress_v.last_scan_time)
+			log.Println(progress_v.last_scan_time, progress_v.asset_id)
 			if progress_v.ongoing == false {
 				quit_chan <- 1
 			}
