@@ -47,13 +47,12 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(task Searchtask, result_chan chan SnapNetResponse, config BotConfig) {
-	snaps, err := mixin.NetworkSnapshots(task.asset_id, task.start_t, true, task.max_len, config.user_id, config.session_id, config.private_key)
+func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, result_chan chan SnapNetResponse, config BotConfig) {
+	snaps, err := mixin.NetworkSnapshots(asset_id, start_t, yesterday2today, max_len, config.user_id, config.session_id, config.private_key)
 
 	if err != nil {
 		result_chan <- SnapNetResponse{
-			Error:    err,
-			MixinReq: task,
+			Error: err,
 		}
 		return
 	}
@@ -63,22 +62,21 @@ func searchSnapshot(task Searchtask, result_chan chan SnapNetResponse, config Bo
 
 	if err != nil {
 		result_chan <- SnapNetResponse{
-			Error:    err,
-			MixinReq: task,
+			Error: err,
 		}
 		return
 	}
 	result_chan <- SnapNetResponse{
 		MixinRespone: resp,
-		MixinReq:     task,
 	}
 }
 
 type Searchtask struct {
-	start_t  time.Time
-	end_t    time.Time
-	max_len  int
-	asset_id string
+	start_t         time.Time
+	end_t           time.Time
+	yesterday2today bool
+	max_len         int
+	asset_id        string
 }
 
 const (
@@ -121,56 +119,47 @@ func main() {
 		session_id:  sessionid,
 		private_key: private_key,
 	}
-	task_chan <- Searchtask{
-		start_t:  start_time2,
-		end_t:    start_time2.AddDate(0, 0, 1),
-		max_len:  500,
-		asset_id: USDT_ASSET_ID,
+	req_task := Searchtask{
+		start_t:         start_time2,
+		end_t:           start_time2.AddDate(0, 0, 4),
+		max_len:         500,
+		yesterday2today: true,
+		asset_id:        XIN_ASSET_ID,
 	}
+	task_chan <- req_task
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
 	now := time.Now()
 	for {
 		select {
 		case task := <-task_chan:
-			log.Println(task.start_t, task.max_len, " for ", task.asset_id)
-			go searchSnapshot(task, network_result_chan, user_config)
+			log.Println(req_task.start_t, req_task.max_len, " for ", task.asset_id)
+			go searchSnapshot(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, network_result_chan, user_config)
 
 		case v := <-network_result_chan:
-			total_task -= 1
 			if v.Error != nil {
-				log.Println("Net work error ", v.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
+				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 			} else {
 				if v.MixinRespone.Error != "" {
-					log.Println("Server return error", v.MixinRespone.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
+					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 				} else {
 					len_of_snap := len(v.MixinRespone.Data)
 					last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
 					log.Println("the last element is created at:", last_element.CreatedAt)
-					if len_of_snap < 500 {
-						log.Println("no enough record to search, pause")
+					if len_of_snap < v.MixinReq.max_len {
+						log.Println("no enough record to search")
 						break
 					} else {
-						if last_element.CreatedAt.After(v.MixinReq.end_t) {
-							log.Println("reach ", v.MixinReq.end_t)
+						if last_element.CreatedAt.After(req_task.end_t) {
+							log.Println("reach ", req_task.end_t)
 							log.Println("total ", time.Now().Sub(now), " passed")
 							return
 						}
-						task_chan <- Searchtask{
-							start_t:  last_element.CreatedAt,
-							end_t:    v.MixinReq.end_t,
-							asset_id: v.MixinReq.asset_id,
-							max_len:  v.MixinReq.max_len,
-						}
-						total_task += 1
+						req_task.start_t = last_element.CreatedAt
+						task_chan <- req_task
 						log.Println("search again ", last_element.CreatedAt)
 					}
 				}
-			}
-
-			if total_task == 0 {
-				log.Println("finish all search")
-				quit_chan <- 0
 			}
 
 		case <-quit_chan:
