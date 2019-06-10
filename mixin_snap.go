@@ -110,7 +110,7 @@ type MixinResponse struct {
 }
 
 func main() {
-	var start_time2 = time.Date(2019, 6, 10, 11, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2018, 4, 1, 0, 0, 0, 0, time.UTC)
 	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int, 2)
@@ -124,7 +124,7 @@ func main() {
 		start_t:         start_time2,
 		max_len:         500,
 		yesterday2today: true,
-		asset_id:        XIN_ASSET_ID,
+		asset_id:        CNB_ASSET_ID,
 	}
 	task_chan <- req_task
 	total_task := len(task_chan)
@@ -145,6 +145,12 @@ func main() {
 					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 					return
 				} else {
+					for _, v := range v.MixinRespone.Data {
+						if v.UserId != "" {
+							log.Println("---------------")
+							log.Println(v.SnapshotId, v.UserId, v.OpponentId)
+						}
+					}
 					len_of_snap := len(v.MixinRespone.Data)
 					if len_of_snap == 0 {
 						time.Sleep(60 * time.Second)
