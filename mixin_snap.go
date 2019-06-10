@@ -110,7 +110,8 @@ type MixinResponse struct {
 }
 
 func main() {
-	var start_time2 = time.Date(2019, 5, 11, 0, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2019, 6, 1, 0, 0, 0, 0, time.UTC)
+	var end_time2 = time.Date(2019, 6, 2, 0, 0, 0, 0, time.UTC)
 	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int, 2)
@@ -123,15 +124,11 @@ func main() {
 	task_chan <- Searchtask{
 		start_t:  start_time2,
 		max_len:  500,
-		asset_id: LTC_ASSET_ID,
-	}
-	task_chan <- Searchtask{
-		start_t:  start_time2,
-		max_len:  500,
-		asset_id: DOGE_ASSET_ID,
+		asset_id: EOS_ASSET_ID,
 	}
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
+	now := time.Now()
 	for {
 		select {
 		case task := <-task_chan:
@@ -139,6 +136,7 @@ func main() {
 			go searchSnapshot(task, network_result_chan, user_config)
 
 		case v := <-network_result_chan:
+			total_task -= 1
 			if v.Error != nil {
 				log.Println("Net work error ", v.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
 			} else {
@@ -146,12 +144,28 @@ func main() {
 					log.Println("Server return error", v.MixinRespone.Error, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
 				} else {
 					len_of_snap := len(v.MixinRespone.Data)
-					log.Println("len of snap:", len_of_snap, " for req:", v.MixinReq.asset_id, " start ", v.MixinReq.start_t)
 					last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
 					log.Println("the last element is created at:", last_element.CreatedAt)
+					if len_of_snap < 500 {
+						log.Println("no enough record to search, pause")
+						break
+					} else {
+						if last_element.CreatedAt.After(end_time2) {
+							log.Println("reach ", end_time2)
+							log.Println("total ", time.Now().Sub(now), " passed")
+							return
+						}
+						task_chan <- Searchtask{
+							start_t:  last_element.CreatedAt,
+							asset_id: v.MixinReq.asset_id,
+							max_len:  v.MixinReq.max_len,
+						}
+						total_task += 1
+						log.Println("search again ", last_element.CreatedAt)
+					}
 				}
 			}
-			total_task -= 1
+
 			if total_task == 0 {
 				log.Println("finish all search")
 				quit_chan <- 0
