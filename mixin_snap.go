@@ -109,7 +109,7 @@ type MixinResponse struct {
 }
 
 func main() {
-	var start_time2 = time.Date(2019, 6, 1, 0, 0, 0, 0, time.UTC)
+	var start_time2 = time.Date(2019, 6, 10, 11, 0, 0, 0, time.UTC)
 	var network_result_chan = make(chan SnapNetResponse, 100)
 	var task_chan = make(chan Searchtask, 100)
 	var quit_chan = make(chan int, 2)
@@ -121,7 +121,6 @@ func main() {
 	}
 	req_task := Searchtask{
 		start_t:         start_time2,
-		end_t:           start_time2.AddDate(0, 0, 4),
 		max_len:         500,
 		yesterday2today: true,
 		asset_id:        XIN_ASSET_ID,
@@ -139,25 +138,29 @@ func main() {
 		case v := <-network_result_chan:
 			if v.Error != nil {
 				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+				task_chan <- req_task
 			} else {
 				if v.MixinRespone.Error != "" {
 					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+					return
 				} else {
 					len_of_snap := len(v.MixinRespone.Data)
-					last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
-					log.Println("the last element is created at:", last_element.CreatedAt)
-					if len_of_snap < v.MixinReq.max_len {
-						log.Println("no enough record to search")
-						break
+					if len_of_snap == 0 {
+						time.Sleep(60 * time.Second)
+						task_chan <- req_task
 					} else {
-						if last_element.CreatedAt.After(req_task.end_t) {
+						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
+						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
 							log.Println("reach ", req_task.end_t)
 							log.Println("total ", time.Now().Sub(now), " passed")
 							return
 						}
+						if len_of_snap < req_task.max_len {
+							log.Println("data len is ", len_of_snap)
+							time.Sleep(60 * time.Second)
+						}
 						req_task.start_t = last_element.CreatedAt
 						task_chan <- req_task
-						log.Println("search again ", last_element.CreatedAt)
 					}
 				}
 			}
