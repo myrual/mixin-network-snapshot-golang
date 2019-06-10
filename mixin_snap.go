@@ -122,6 +122,7 @@ func main() {
 	}
 	req_task := Searchtask{
 		start_t:         start_time2,
+		end_t:           time.Date(2018, 4, 28, 0, 0, 0, 0, time.UTC),
 		max_len:         500,
 		yesterday2today: true,
 		asset_id:        CNB_ASSET_ID,
@@ -130,10 +131,11 @@ func main() {
 	total_task := len(task_chan)
 	log.Println("go with ", total_task, " tasks")
 	now := time.Now()
+	total_cnb := 0
 	for {
 		select {
 		case task := <-task_chan:
-			log.Println(req_task.start_t, req_task.max_len, " for ", task.asset_id)
+			log.Println(req_task.start_t, req_task.max_len, " for ", task.asset_id, " total my cnb tran", total_cnb)
 			go searchSnapshot(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, network_result_chan, user_config)
 
 		case v := <-network_result_chan:
@@ -147,8 +149,7 @@ func main() {
 				} else {
 					for _, v := range v.MixinRespone.Data {
 						if v.UserId != "" {
-							log.Println("---------------")
-							log.Println(v.SnapshotId, " me ", v.UserId, " opp ", v.OpponentId, " amount ", v.Amount)
+							total_cnb += 1
 						}
 					}
 					len_of_snap := len(v.MixinRespone.Data)
