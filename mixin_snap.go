@@ -149,7 +149,7 @@ func main() {
 				} else {
 					for _, v := range v.MixinRespone.Data {
 						if v.UserId != "" {
-							total_cnb += 1
+
 						}
 					}
 					len_of_snap := len(v.MixinRespone.Data)
