@@ -47,26 +47,24 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, result_chan chan SnapNetResponse, config BotConfig) {
+func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, config BotConfig) SnapNetResponse {
 	snaps, err := mixin.NetworkSnapshots(asset_id, start_t, yesterday2today, max_len, config.user_id, config.session_id, config.private_key)
 
 	if err != nil {
-		result_chan <- SnapNetResponse{
+		return SnapNetResponse{
 			Error: err,
 		}
-		return
 	}
 
 	var resp MixinResponse
 	err = json.Unmarshal(snaps, &resp)
 
 	if err != nil {
-		result_chan <- SnapNetResponse{
+		return SnapNetResponse{
 			Error: err,
 		}
-		return
 	}
-	result_chan <- SnapNetResponse{
+	return SnapNetResponse{
 		MixinRespone: resp,
 	}
 }
@@ -74,14 +72,16 @@ func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, ma
 type Searchtask struct {
 	start_t         time.Time
 	end_t           time.Time
+	last_t          time.Time
 	yesterday2today bool
 	max_len         int
 	asset_id        string
+	ongoing         bool
 }
+
 type Searchprogress struct {
-	ongoing        bool
-	last_scan_time time.Time
-	asset_id       string
+	search_task Searchtask
+	Error       error
 }
 
 const (
@@ -114,25 +114,37 @@ type MixinResponse struct {
 	Error string      `json:"error"`
 }
 
-func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress, quit_c chan int) {
-	var task_chan = make(chan Searchtask, 100)
-	var network_result_chan = make(chan SnapNetResponse, 100)
+//read snapshot related to the account or account created by the account
+//given asset id and kick off time:
+//    the routine will read and filter snapshot endless,
+//    push snap result into channel
+//    and progress to another channel
+//given asset id and kick off time and end time:
+//    the routine will read and filter snapshot between the kick off and end time,
+//    filter snapshot and push data to channel, and progress to another channel
 
+func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress, quit_c chan int) {
+	var task_chan = make(chan Searchtask, 1)
+	req_task.last_t = req_task.start_t
 	task_chan <- req_task
 	now := time.Now()
 	for {
 		select {
+		case <-quit_c:
+			return
 		case task := <-task_chan:
-			go searchSnapshot(task.asset_id, task.start_t, task.yesterday2today, task.max_len, network_result_chan, user_config)
-
-		case v := <-network_result_chan:
+			v := searchSnapshot(task.asset_id, task.last_t, task.yesterday2today, task.max_len, user_config)
 			if v.Error != nil {
+				progress_chan <- Searchprogress{
+					Error: v.Error,
+				}
 				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 				task_chan <- req_task
 			} else {
 				if v.MixinRespone.Error != "" {
 					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-					return
+					quit_c <- 1
+					continue
 				} else {
 					for _, v := range v.MixinRespone.Data {
 						if v.UserId != "" {
@@ -145,33 +157,40 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 						task_chan <- req_task
 					} else {
 						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
-						progress := Searchprogress{
-							last_scan_time: last_element.CreatedAt,
-							asset_id:       req_task.asset_id,
+						req_task.last_t = last_element.CreatedAt
+						p := Searchprogress{
+							search_task: req_task,
 						}
 						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
 							log.Println("reach ", req_task.end_t)
 							log.Println("total ", time.Now().Sub(now), " passed")
-							progress.ongoing = false
-							progress_chan <- progress
-							return
+							p.search_task.ongoing = false
+							progress_chan <- p
+							quit_c <- 1
+							continue
 						}
-						progress.ongoing = true
-						progress_chan <- progress
+						p.search_task.ongoing = true
+						progress_chan <- p
 
 						if len_of_snap < req_task.max_len {
 							log.Println("data len is ", len_of_snap)
 							time.Sleep(60 * time.Second)
 						}
-						req_task.start_t = last_element.CreatedAt
 						task_chan <- req_task
 					}
 				}
 			}
-		case <-quit_c:
-			return
 		}
 	}
+}
+
+type LastScanReport struct {
+	kick_off_t       time.Time
+	ending_t         time.Time
+	last_scanned_t   time.Time
+	scanned_asset_id string
+	ongoing          bool
+	Error            error
 }
 
 func main() {
@@ -187,18 +206,22 @@ func main() {
 	}
 	req_task := Searchtask{
 		start_t:         start_time2,
-		end_t:           time.Date(2018, 4, 28, 0, 0, 0, 0, time.UTC),
+		end_t:           time.Date(2018, 4, 26, 0, 0, 0, 0, time.UTC),
 		max_len:         500,
 		yesterday2today: true,
 		asset_id:        CNB_ASSET_ID,
 	}
-	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, quit_chan)
+	cnb_notify_quit := make(chan int, 1)
+	snap_quit_c := make(chan int, 1)
+	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_quit_c)
 	total_found_snap := 0
 	for {
 		select {
-		case progress_v := <-progress_chan:
-			log.Println(progress_v.last_scan_time, progress_v.asset_id)
-			if progress_v.ongoing == false {
+		case <-cnb_notify_quit:
+			log.Println("cnb asset scan quit")
+		case pv := <-progress_chan:
+			log.Println(pv.search_task.last_t, pv.search_task.asset_id, pv.search_task.ongoing)
+			if pv.search_task.ongoing == false {
 				quit_chan <- 1
 			}
 		case v := <-my_snapshot_chan:
