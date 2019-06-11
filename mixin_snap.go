@@ -47,28 +47,15 @@ type BotConfig struct {
 	private_key string
 }
 
-func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, config BotConfig) SnapNetResponse {
-	snaps, err := mixin.NetworkSnapshots(asset_id, start_t, yesterday2today, max_len, config.user_id, config.session_id, config.private_key)
-
-	if err != nil {
-		return SnapNetResponse{
-			Error: err,
-		}
-	}
-
-	var resp MixinResponse
-	err = json.Unmarshal(snaps, &resp)
-
-	if err != nil {
-		return SnapNetResponse{
-			Error: err,
-		}
-	}
-	return SnapNetResponse{
-		MixinRespone: resp,
-	}
+type SnapNetResponse struct {
+	Error        error
+	MixinRespone MixinResponse
 }
 
+type MixinResponse struct {
+	Data  []*Snapshot `json:"data"`
+	Error string      `json:"error"`
+}
 type Searchtask struct {
 	start_t         time.Time
 	end_t           time.Time
@@ -103,15 +90,26 @@ const (
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 )
 
-type SnapNetResponse struct {
-	Error        error
-	MixinReq     Searchtask
-	MixinRespone MixinResponse
-}
+func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, config BotConfig) SnapNetResponse {
+	snaps, err := mixin.NetworkSnapshots(asset_id, start_t, yesterday2today, max_len, config.user_id, config.session_id, config.private_key)
 
-type MixinResponse struct {
-	Data  []*Snapshot `json:"data"`
-	Error string      `json:"error"`
+	if err != nil {
+		return SnapNetResponse{
+			Error: err,
+		}
+	}
+
+	var resp MixinResponse
+	err = json.Unmarshal(snaps, &resp)
+
+	if err != nil {
+		return SnapNetResponse{
+			Error: err,
+		}
+	}
+	return SnapNetResponse{
+		MixinRespone: resp,
+	}
 }
 
 //read snapshot related to the account or account created by the account
