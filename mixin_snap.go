@@ -124,73 +124,45 @@ type MixinResponse struct {
 //    filter snapshot and push data to channel, and progress to another channel
 
 func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress, quit_c chan int) {
-	var task_chan = make(chan Searchtask, 1)
 	req_task.last_t = req_task.start_t
-	task_chan <- req_task
-	now := time.Now()
 	for {
-		select {
-		case <-quit_c:
+		v := searchSnapshot(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config)
+		if v.Error != nil {
+			progress_chan <- Searchprogress{
+				Error: v.Error,
+			}
+			continue
+		}
+		if v.MixinRespone.Error != "" {
+			log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 			return
-		case task := <-task_chan:
-			v := searchSnapshot(task.asset_id, task.last_t, task.yesterday2today, task.max_len, user_config)
-			if v.Error != nil {
-				progress_chan <- Searchprogress{
-					Error: v.Error,
-				}
-				log.Println("Net work error ", v.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-				task_chan <- req_task
-			} else {
-				if v.MixinRespone.Error != "" {
-					log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-					quit_c <- 1
-					continue
-				} else {
-					for _, v := range v.MixinRespone.Data {
-						if v.UserId != "" {
-							result_chan <- v
-						}
-					}
-					len_of_snap := len(v.MixinRespone.Data)
-					if len_of_snap == 0 {
-						time.Sleep(60 * time.Second)
-						task_chan <- req_task
-					} else {
-						last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
-						req_task.last_t = last_element.CreatedAt
-						p := Searchprogress{
-							search_task: req_task,
-						}
-						if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
-							log.Println("reach ", req_task.end_t)
-							log.Println("total ", time.Now().Sub(now), " passed")
-							p.search_task.ongoing = false
-							progress_chan <- p
-							quit_c <- 1
-							continue
-						}
-						p.search_task.ongoing = true
-						progress_chan <- p
-
-						if len_of_snap < req_task.max_len {
-							log.Println("data len is ", len_of_snap)
-							time.Sleep(60 * time.Second)
-						}
-						task_chan <- req_task
-					}
-				}
+		}
+		for _, v := range v.MixinRespone.Data {
+			if v.UserId != "" {
+				result_chan <- v
 			}
 		}
+		len_of_snap := len(v.MixinRespone.Data)
+		if len_of_snap == 0 {
+			time.Sleep(60 * time.Second)
+			continue
+		}
+		last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
+		req_task.last_t = last_element.CreatedAt
+		p := Searchprogress{
+			search_task: req_task,
+		}
+		if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
+			p.search_task.ongoing = false
+			progress_chan <- p
+			return
+		}
+		p.search_task.ongoing = true
+		progress_chan <- p
+		if len_of_snap < req_task.max_len {
+			time.Sleep(60 * time.Second)
+		}
 	}
-}
-
-type LastScanReport struct {
-	kick_off_t       time.Time
-	ending_t         time.Time
-	last_scanned_t   time.Time
-	scanned_asset_id string
-	ongoing          bool
-	Error            error
 }
 
 func main() {
@@ -225,7 +197,9 @@ func main() {
 		case pv := <-progress_chan:
 			if pv.Error != nil {
 				log.Println(pv.Error)
-			} else {
+				continue
+			}
+			if pv.search_task.ongoing == false {
 				log.Println(pv.search_task.last_t, pv.search_task.end_t, pv.search_task.start_t, pv.search_task.asset_id, pv.search_task.ongoing)
 			}
 		case v := <-my_snapshot_chan:
