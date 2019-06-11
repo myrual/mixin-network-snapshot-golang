@@ -165,8 +165,8 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 
 func main() {
 	var start_time2 = time.Date(2018, 4, 25, 0, 0, 0, 0, time.UTC)
-	var my_snapshot_chan = make(chan *Snapshot, 100)
-	var progress_chan = make(chan Searchprogress, 100)
+	var my_snapshot_chan = make(chan *Snapshot, 1000)
+	var progress_chan = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 
 	var user_config = BotConfig{
@@ -181,17 +181,17 @@ func main() {
 		yesterday2today: true,
 		asset_id:        CNB_ASSET_ID,
 	}
-	cnb_notify_quit := make(chan int, 1)
 	snap_cnb_quit_c := make(chan int, 1)
 	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
 	snap_ltc_quit_c := make(chan int, 1)
 	req_task.asset_id = XIN_ASSET_ID
 	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_ltc_quit_c)
+	req_task.start_t = time.Date(2018, 5, 1, 0, 0, 0, 0, time.UTC)
+	req_task.end_t = time.Date(2018, 5, 2, 0, 0, 0, 0, time.UTC)
+	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_ltc_quit_c)
 	total_found_snap := 0
 	for {
 		select {
-		case <-cnb_notify_quit:
-			log.Println("cnb asset scan quit")
 		case pv := <-progress_chan:
 			if pv.Error != nil {
 				log.Println(pv.Error)
