@@ -212,17 +212,21 @@ func main() {
 		asset_id:        CNB_ASSET_ID,
 	}
 	cnb_notify_quit := make(chan int, 1)
-	snap_quit_c := make(chan int, 1)
-	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_quit_c)
+	snap_cnb_quit_c := make(chan int, 1)
+	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
+	snap_ltc_quit_c := make(chan int, 1)
+	req_task.asset_id = XIN_ASSET_ID
+	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_ltc_quit_c)
 	total_found_snap := 0
 	for {
 		select {
 		case <-cnb_notify_quit:
 			log.Println("cnb asset scan quit")
 		case pv := <-progress_chan:
-			log.Println(pv.search_task.last_t, pv.search_task.asset_id, pv.search_task.ongoing)
-			if pv.search_task.ongoing == false {
-				quit_chan <- 1
+			if pv.Error != nil {
+				log.Println(pv.Error)
+			} else {
+				log.Println(pv.search_task.last_t, pv.search_task.end_t, pv.search_task.start_t, pv.search_task.asset_id, pv.search_task.ongoing)
 			}
 		case v := <-my_snapshot_chan:
 			total_found_snap += 1
