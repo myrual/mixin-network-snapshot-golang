@@ -6,6 +6,8 @@ import (
 	"time"
 
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 const (
@@ -34,13 +36,36 @@ type Snapshot struct {
 	Asset      struct {
 		AssetId string `json:"asset_id"`
 	} `json:"asset"`
-	CreatedAt time.Time `json:"created_at"`
-
-	TraceId    string `json:"trace_id"`
-	UserId     string `json:"user_id"`
-	OpponentId string `json:"opponent_id"`
-	Data       string `json:"data"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+	TraceId    string    `json:"trace_id"`
+	UserId     string    `json:"user_id"`
+	OpponentId string    `json:"opponent_id"`
+	Data       string    `json:"data"`
 }
+
+type Snapshotindb struct {
+	gorm.Model
+	SnapshotId    string `gorm:"primary_key"`
+	Amount        string
+	AssetId       string `gorm:"index"`
+	Source        string `gorm:"index"`
+	SnapCreatedAt time.Time
+	UserId        string `gorm:"index"`
+	TraceId       string
+	OpponentId    string
+	Data          string
+}
+type Searchtaskindb struct {
+	gorm.Model
+	Starttime       time.Time
+	Endtime         time.Time
+	Lasttime        time.Time
+	Yesterday2today bool
+	Assetid         string
+	Ongoing         bool
+}
+
 type BotConfig struct {
 	user_id     string
 	session_id  string
@@ -169,6 +194,15 @@ func main() {
 	var progress_chan = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 
+	db, err := gorm.Open("sqlite3", "test.db")
+	if err != nil {
+		panic("failed to connect database")
+	}
+	defer db.Close()
+
+	db.AutoMigrate(&Snapshotindb{})
+	db.AutoMigrate(&Searchtaskindb{})
+
 	var user_config = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
@@ -176,19 +210,35 @@ func main() {
 	}
 	req_task := Searchtask{
 		start_t:         start_time2,
-		end_t:           time.Date(2018, 4, 26, 0, 0, 0, 0, time.UTC),
 		max_len:         500,
 		yesterday2today: true,
 		asset_id:        CNB_ASSET_ID,
 	}
+	var searchtasks_array_indb []Searchtaskindb
+	db.Find(&searchtasks_array_indb)
+	log.Println("Total ", len(searchtasks_array_indb), " search task")
 	snap_cnb_quit_c := make(chan int, 1)
-	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
-	snap_ltc_quit_c := make(chan int, 1)
-	req_task.asset_id = XIN_ASSET_ID
-	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_ltc_quit_c)
-	req_task.start_t = time.Date(2018, 5, 1, 0, 0, 0, 0, time.UTC)
-	req_task.end_t = time.Date(2018, 5, 2, 0, 0, 0, 0, time.UTC)
-	go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_ltc_quit_c)
+
+	if len(searchtasks_array_indb) > 0 {
+		for _, v := range searchtasks_array_indb {
+
+			if v.Ongoing == true {
+				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Lasttime)
+				unfinished_req_task := Searchtask{
+					start_t:         v.Starttime,
+					end_t:           v.Endtime,
+					last_t:          v.Lasttime,
+					yesterday2today: v.Yesterday2today,
+					asset_id:        v.Assetid,
+					ongoing:         v.Ongoing,
+				}
+				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
+			}
+		}
+	} else {
+		go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
+	}
+
 	total_found_snap := 0
 	for {
 		select {
@@ -197,10 +247,46 @@ func main() {
 				log.Println(pv.Error)
 				continue
 			}
-			if pv.search_task.ongoing == false {
-				log.Println(pv.search_task.last_t, pv.search_task.end_t, pv.search_task.start_t, pv.search_task.asset_id, pv.search_task.ongoing)
+			searchtaskindb := Searchtaskindb{}
+			query_task := Searchtaskindb{
+				Starttime: pv.search_task.start_t,
+				Endtime:   pv.search_task.end_t,
+				Assetid:   pv.search_task.asset_id,
 			}
+			db.Where(&query_task).First(&searchtaskindb)
+			if searchtaskindb.CreatedAt.IsZero() {
+				var this_record = Searchtaskindb{
+					Starttime:       pv.search_task.start_t,
+					Endtime:         pv.search_task.end_t,
+					Lasttime:        pv.search_task.last_t,
+					Yesterday2today: pv.search_task.yesterday2today,
+					Assetid:         pv.search_task.asset_id,
+					Ongoing:         pv.search_task.ongoing,
+				}
+				db.Create(&this_record)
+			} else {
+				db.Model(&searchtaskindb).Update(Searchtaskindb{Lasttime: pv.search_task.last_t, Ongoing: pv.search_task.ongoing})
+			}
+			log.Println(pv.search_task.ongoing, pv.search_task.last_t)
 		case v := <-my_snapshot_chan:
+			snapInDb := Snapshotindb{
+				SnapshotId: v.SnapshotId,
+			}
+			db.First(&snapInDb, "snapshot_id = ?", v.SnapshotId)
+			if snapInDb.CreatedAt.IsZero() {
+				var thisrecord = Snapshotindb{
+					SnapshotId:    v.SnapshotId,
+					Amount:        v.Amount,
+					AssetId:       v.Asset.AssetId,
+					Source:        v.Source,
+					SnapCreatedAt: v.CreatedAt,
+					UserId:        v.UserId,
+					TraceId:       v.TraceId,
+					OpponentId:    v.OpponentId,
+					Data:          v.Data,
+				}
+				db.Create(&thisrecord)
+			}
 			total_found_snap += 1
 			if total_found_snap%100 == 0 {
 				log.Println(total_found_snap, v.SnapshotId, v.CreatedAt)
