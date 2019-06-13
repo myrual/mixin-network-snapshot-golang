@@ -408,9 +408,15 @@ func main() {
 					for _, v := range allaccount {
 						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
 					}
-					var count int
-					db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&count)
-					result += fmt.Sprintf("total %v empty users", count)
+					var available_mixin_account int
+					db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
+					result += fmt.Sprintf("total %v empty users", available_mixin_account)
+					if available_mixin_account < 10 {
+						for i := 10; i > available_mixin_account; i-- {
+							const predefine_pin string = "123456"
+							go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
+						}
+					}
 				}
 			}
 			result += "allsnap: read all snap\n"
