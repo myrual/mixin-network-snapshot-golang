@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
@@ -185,14 +186,13 @@ func user_interact(cmd_c chan string, output_c chan string) {
 	var cmd string
 
 	for {
-		log.Println("allsnap: read all record")
-		scanner.Scan()
-		cmd = scanner.Text()
-		cmd_c <- cmd
 		select {
 		case v := <-output_c:
 			log.Println(v)
 		}
+		scanner.Scan()
+		cmd = scanner.Text()
+		cmd_c <- cmd
 	}
 }
 
@@ -248,7 +248,10 @@ func main() {
 	} else {
 		go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
 	}
-
+	promot := "allsnap: read all snap\n"
+	promot += "status: ongoing search task\n"
+	promot += "your selection:"
+	user_output_chan <- promot
 	go user_interact(user_cmd_chan, user_output_chan)
 	for {
 		select {
@@ -300,19 +303,17 @@ func main() {
 			log.Println("finished")
 			return
 		case v := <-user_cmd_chan:
+			result := ""
 			switch v {
 			case "allsnap":
 				var allsnap []Snapshotindb
 				db.Find(&allsnap)
-				result := ""
 				for _, v := range allsnap {
 					result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
 				}
-				user_output_chan <- result
 			case "status":
 				var alltask []Searchtaskindb
 				db.Find(&alltask)
-				result := ""
 				total_ongoing := 0
 				total_finished := 0
 				for _, v := range alltask {
@@ -325,13 +326,25 @@ func main() {
 				}
 				result += fmt.Sprintf("total %v ongoing", total_ongoing)
 				result += fmt.Sprintf("total %v finished", total_finished)
-				user_output_chan <- result
+			case "quit":
+				quit_chan <- 1
 			default:
-				promot := "allsnap: read all snap\n"
-				promot += "status: ongoing search task\n"
-				promot += "your selection:"
-				user_output_chan <- "allsnap: read all snap"
+				splited_string := strings.Split(v, " ")
+				switch splited_string[0] {
+				case "searchuser":
+					user := splited_string[1]
+					var users_snap []Snapshotindb
+					db.Where(&Snapshotindb{UserId: user}).Find(&users_snap)
+					for _, v := range users_snap {
+						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
+					}
+				}
+
 			}
+			result += "allsnap: read all snap\n"
+			result += "status: ongoing search task\n"
+			result += "your selection:"
+			user_output_chan <- result
 		}
 	}
 }
