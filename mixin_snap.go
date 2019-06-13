@@ -236,7 +236,7 @@ func main() {
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
 	var mixin_account_chan = make(chan MixinAccount, 100)
-
+	var pre_create_account_chan = make(chan uint, 10)
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
 		panic("failed to connect database")
@@ -339,6 +339,16 @@ func main() {
 			return
 		case new_user := <-mixin_account_chan:
 			db.Create(&new_user)
+		case <-pre_create_account_chan:
+			var available_mixin_account int
+			db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
+			if available_mixin_account < 10 {
+				for i := 20; i > available_mixin_account; i-- {
+					const predefine_pin string = "123456"
+					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
+				}
+			}
+
 		case v := <-user_cmd_chan:
 			result := "\n"
 			switch v {
@@ -393,6 +403,7 @@ func main() {
 						db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
 						result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
 					} else {
+						pre_create_account_chan <- 1
 						//no avaible mixin account, create one now
 						const predefine_pin string = "123456"
 						user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
@@ -432,15 +443,7 @@ func main() {
 					for _, v := range allaccount {
 						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
 					}
-					var available_mixin_account int
-					db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
-					result += fmt.Sprintf("total %v empty users", available_mixin_account)
-					if available_mixin_account < 10 {
-						for i := 10; i > available_mixin_account; i-- {
-							const predefine_pin string = "123456"
-							go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
-						}
-					}
+					pre_create_account_chan <- 1
 				}
 			}
 			result += "allsnap: read all snap\n"
