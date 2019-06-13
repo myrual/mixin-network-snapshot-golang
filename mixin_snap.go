@@ -212,6 +212,22 @@ func user_interact(cmd_c chan string, output_c chan string) {
 	}
 }
 
+func create_mixin_account(account_name string, predefine_pin string, user_id string, session_id string, private_key string, result_chan chan MixinAccount) {
+	user, err := mixin.CreateAppUser(account_name, predefine_pin, user_id, session_id, private_key)
+	if err != nil {
+		log.Println(err)
+	} else {
+		new_user := MixinAccount{
+			Userid:      user.UserId,
+			Sessionid:   user.SessionId,
+			Pintoken:    user.PinToken,
+			Privatekey:  user.PrivateKey,
+			Pin:         predefine_pin,
+			ClientReqid: 0,
+		}
+		result_chan <- new_user
+	}
+}
 func main() {
 	var start_time2 = time.Date(2018, 4, 25, 0, 0, 0, 0, time.UTC)
 	var my_snapshot_chan = make(chan *Snapshot, 1000)
@@ -219,6 +235,7 @@ func main() {
 	var quit_chan = make(chan int, 2)
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
+	var mixin_account_chan = make(chan MixinAccount, 100)
 
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
@@ -320,6 +337,8 @@ func main() {
 		case <-quit_chan:
 			log.Println("finished")
 			return
+		case new_user := <-mixin_account_chan:
+			db.Create(&new_user)
 		case v := <-user_cmd_chan:
 			result := "\n"
 			switch v {
@@ -382,21 +401,7 @@ func main() {
 					}
 				case "createuser":
 					const predefine_pin string = "123456"
-					user, err := mixin.CreateAppUser("jerry", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
-					if err != nil {
-						log.Println(err)
-					} else {
-						new_user := MixinAccount{
-							Userid:      user.UserId,
-							Sessionid:   user.SessionId,
-							Pintoken:    user.PinToken,
-							Privatekey:  user.PrivateKey,
-							Pin:         predefine_pin,
-							ClientReqid: 0,
-						}
-						db.Create(&new_user)
-						result += fmt.Sprintf("new user created with record id: %v, user id: %v, with zero client request %v\n", new_user.ID, new_user.Userid, new_user.ClientReqid)
-					}
+					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
 				case "listusers":
 					var allaccount []MixinAccount
 					db.Find(&allaccount)
