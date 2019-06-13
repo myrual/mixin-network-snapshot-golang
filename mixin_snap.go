@@ -68,12 +68,12 @@ type MixinAccount struct {
 	Pintoken    string
 	Privatekey  string
 	Pin         string
-	ClientReqID uint
+	ClientReqid uint
 }
 type ClientReq struct {
 	gorm.Model
 	Callbackurl    string
-	MixinAccountID uint
+	MixinAccountid uint
 }
 
 type Searchtaskindb struct {
@@ -356,43 +356,52 @@ func main() {
 					for _, v := range users_snap {
 						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
 					}
-				case "createuser":
-					splited_string := strings.Split(v, " ")
+				case "createreq":
 					var unique_id string
 					if len(splited_string) > 1 {
 						unique_id = splited_string[1]
 					} else {
 						unique_id = "unique"
 					}
-
+					var notlinked_mixinaccount MixinAccount
+					db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
+					if notlinked_mixinaccount.ID != 0 {
+						new_req := ClientReq{
+							Callbackurl:    unique_id,
+							MixinAccountid: notlinked_mixinaccount.ID,
+						}
+						db.Create(&new_req)
+						db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
+						result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
+					}
+				case "listreqs":
+					var allreqs []ClientReq
+					db.Find(&allreqs)
+					for _, v := range allreqs {
+						result += fmt.Sprintf("req id: %v %v %v\n", v.ID, v.Callbackurl, v.MixinAccountid)
+					}
+				case "createuser":
 					const predefine_pin string = "123456"
 					user, err := mixin.CreateAppUser("jerry", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
 					if err != nil {
 						log.Println(err)
 					} else {
 						new_user := MixinAccount{
-							Userid:     user.UserId,
-							Sessionid:  user.SessionId,
-							Pintoken:   user.PinToken,
-							Privatekey: user.PrivateKey,
-							Pin:        predefine_pin,
+							Userid:      user.UserId,
+							Sessionid:   user.SessionId,
+							Pintoken:    user.PinToken,
+							Privatekey:  user.PrivateKey,
+							Pin:         predefine_pin,
+							ClientReqid: 0,
 						}
 						db.Create(&new_user)
-						new_req := ClientReq{
-							Callbackurl:    unique_id,
-							MixinAccountID: new_user.ID,
-						}
-						db.Create(&new_req)
-						db.Model(&new_user).Update(MixinAccount{ClientReqID: new_req.ID})
-						result += fmt.Sprintf("new user created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_user.ClientReqID)
+						result += fmt.Sprintf("new user created with record id: %v, user id: %v, with zero client request %v\n", new_user.ID, new_user.Userid, new_user.ClientReqid)
 					}
 				case "listusers":
-					var allreqs []ClientReq
-					db.Find(&allreqs)
-					for _, v := range allreqs {
-						var mixin_account MixinAccount
-						db.First(&mixin_account, v.MixinAccountID)
-						result += fmt.Sprintf("req id: %v %v %v\n", v.ID, v.MixinAccountID, mixin_account.Userid)
+					var allaccount []MixinAccount
+					db.Find(&allaccount)
+					for _, v := range allaccount {
+						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
 					}
 				}
 			}
