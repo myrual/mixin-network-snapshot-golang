@@ -115,28 +115,6 @@ const (
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 )
 
-func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, max_len int, config BotConfig) SnapNetResponse {
-	snaps, err := mixin.NetworkSnapshots(asset_id, start_t, yesterday2today, max_len, config.user_id, config.session_id, config.private_key)
-
-	if err != nil {
-		return SnapNetResponse{
-			Error: err,
-		}
-	}
-
-	var resp MixinResponse
-	err = json.Unmarshal(snaps, &resp)
-
-	if err != nil {
-		return SnapNetResponse{
-			Error: err,
-		}
-	}
-	return SnapNetResponse{
-		MixinRespone: resp,
-	}
-}
-
 //read snapshot related to the account or account created by the account
 //given asset id and kick off time:
 //    the routine will read and filter snapshot endless,
@@ -149,28 +127,39 @@ func searchSnapshot(asset_id string, start_t time.Time, yesterday2today bool, ma
 func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress, quit_c chan int) {
 	req_task.last_t = req_task.start_t
 	for {
-		v := searchSnapshot(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config)
-		if v.Error != nil {
+		snaps, err := mixin.NetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
+
+		if err != nil {
 			progress_chan <- Searchprogress{
-				Error: v.Error,
+				Error: err,
 			}
 			continue
 		}
-		if v.MixinRespone.Error != "" {
-			log.Println("Server return error", v.MixinRespone.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+
+		var resp MixinResponse
+		err = json.Unmarshal(snaps, &resp)
+
+		if err != nil {
+			progress_chan <- Searchprogress{
+				Error: err,
+			}
+			continue
+		}
+		if resp.Error != "" {
+			log.Println("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 			return
 		}
-		for _, v := range v.MixinRespone.Data {
+		for _, v := range resp.Data {
 			if v.UserId != "" {
 				result_chan <- v
 			}
 		}
-		len_of_snap := len(v.MixinRespone.Data)
+		len_of_snap := len(resp.Data)
 		if len_of_snap == 0 {
 			time.Sleep(60 * time.Second)
 			continue
 		}
-		last_element := v.MixinRespone.Data[len(v.MixinRespone.Data)-1]
+		last_element := resp.Data[len(resp.Data)-1]
 		req_task.last_t = last_element.CreatedAt
 		p := Searchprogress{
 			search_task: req_task,
@@ -288,8 +277,8 @@ func main() {
 				db.Create(&thisrecord)
 			}
 			total_found_snap += 1
-			if total_found_snap%100 == 0 {
-				log.Println(total_found_snap, v.SnapshotId, v.CreatedAt)
+			if total_found_snap%500 == 0 {
+				log.Println(total_found_snap, v.SnapshotId, v.UserId, v.OpponentId, v.Amount, v.CreatedAt)
 			}
 		case <-quit_chan:
 			log.Println("finished")
