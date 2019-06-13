@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 	"time"
 
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
@@ -177,11 +180,29 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 	}
 }
 
+func user_interact(cmd_c chan string, output_c chan string) {
+	scanner := bufio.NewScanner(os.Stdin)
+	var cmd string
+
+	for {
+		log.Println("allsnap: read all record")
+		scanner.Scan()
+		cmd = scanner.Text()
+		cmd_c <- cmd
+		select {
+		case v := <-output_c:
+			log.Println(v)
+		}
+	}
+}
+
 func main() {
 	var start_time2 = time.Date(2018, 4, 25, 0, 0, 0, 0, time.UTC)
 	var my_snapshot_chan = make(chan *Snapshot, 1000)
 	var progress_chan = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
+	var user_cmd_chan = make(chan string, 10)
+	var user_output_chan = make(chan string, 100)
 
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
@@ -228,7 +249,7 @@ func main() {
 		go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan, snap_cnb_quit_c)
 	}
 
-	total_found_snap := 0
+	go user_interact(user_cmd_chan, user_output_chan)
 	for {
 		select {
 		case pv := <-progress_chan:
@@ -256,7 +277,6 @@ func main() {
 			} else {
 				db.Model(&searchtaskindb).Update(Searchtaskindb{Lasttime: pv.search_task.last_t, Ongoing: pv.search_task.ongoing})
 			}
-			log.Println(pv.search_task.ongoing, pv.search_task.last_t)
 		case v := <-my_snapshot_chan:
 			snapInDb := Snapshotindb{
 				SnapshotId: v.SnapshotId,
@@ -276,13 +296,42 @@ func main() {
 				}
 				db.Create(&thisrecord)
 			}
-			total_found_snap += 1
-			if total_found_snap%500 == 0 {
-				log.Println(total_found_snap, v.SnapshotId, v.UserId, v.OpponentId, v.Amount, v.CreatedAt)
-			}
 		case <-quit_chan:
 			log.Println("finished")
 			return
+		case v := <-user_cmd_chan:
+			switch v {
+			case "allsnap":
+				var allsnap []Snapshotindb
+				db.Find(&allsnap)
+				result := ""
+				for _, v := range allsnap {
+					result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
+				}
+				user_output_chan <- result
+			case "status":
+				var alltask []Searchtaskindb
+				db.Find(&alltask)
+				result := ""
+				total_ongoing := 0
+				total_finished := 0
+				for _, v := range alltask {
+					if v.Ongoing {
+						total_ongoing += 1
+						result += fmt.Sprintf("search %v at %v from:%v to %v\n", v.Assetid, v.Lasttime, v.Starttime, v.Endtime)
+					} else {
+						total_finished += 1
+					}
+				}
+				result += fmt.Sprintf("total %v ongoing", total_ongoing)
+				result += fmt.Sprintf("total %v finished", total_finished)
+				user_output_chan <- result
+			default:
+				promot := "allsnap: read all snap\n"
+				promot += "status: ongoing search task\n"
+				promot += "your selection:"
+				user_output_chan <- "allsnap: read all snap"
+			}
 		}
 	}
 }
