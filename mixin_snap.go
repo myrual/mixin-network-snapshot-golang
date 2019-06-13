@@ -408,6 +408,9 @@ func main() {
 					for _, v := range allaccount {
 						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
 					}
+					var count int
+					db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&count)
+					result += fmt.Sprintf("total %v empty users", count)
 				}
 			}
 			result += "allsnap: read all snap\n"
