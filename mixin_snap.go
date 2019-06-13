@@ -392,6 +392,30 @@ func main() {
 						db.Create(&new_req)
 						db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
 						result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
+					} else {
+						//no avaible mixin account, create one now
+						const predefine_pin string = "123456"
+						user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
+						if err != nil {
+							log.Println(err)
+						} else {
+							new_user := MixinAccount{
+								Userid:      user.UserId,
+								Sessionid:   user.SessionId,
+								Pintoken:    user.PinToken,
+								Privatekey:  user.PrivateKey,
+								Pin:         predefine_pin,
+								ClientReqid: 0,
+							}
+							db.Create(&new_user)
+							new_req := ClientReq{
+								Callbackurl:    unique_id,
+								MixinAccountid: new_user.ID,
+							}
+							db.Create(&new_req)
+							db.Model(&new_user).Update(MixinAccount{ClientReqid: new_req.ID})
+							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
+						}
 					}
 				case "listreqs":
 					var allreqs []ClientReq
