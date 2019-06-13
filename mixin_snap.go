@@ -60,6 +60,16 @@ type Snapshotindb struct {
 	OpponentId    string
 	Data          string
 }
+
+type Mixinaccountindb struct {
+	gorm.Model
+	Userid     string `gorm:"primary_key"`
+	Sessionid  string
+	Pintoken   string
+	Privatekey string
+	Pin        string
+}
+
 type Searchtaskindb struct {
 	gorm.Model
 	Starttime       time.Time
@@ -212,6 +222,7 @@ func main() {
 
 	db.AutoMigrate(&Snapshotindb{})
 	db.AutoMigrate(&Searchtaskindb{})
+	db.AutoMigrate(&Mixinaccountindb{})
 
 	var user_config = BotConfig{
 		user_id:     userid,
@@ -303,7 +314,7 @@ func main() {
 			log.Println("finished")
 			return
 		case v := <-user_cmd_chan:
-			result := ""
+			result := "\n"
 			switch v {
 			case "allsnap":
 				var allsnap []Snapshotindb
@@ -338,8 +349,30 @@ func main() {
 					for _, v := range users_snap {
 						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
 					}
-				}
+				case "createuser":
+					const predefine_pin string = "123456"
+					user, err := mixin.CreateAppUser("jerry", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
+					if err != nil {
+						log.Println(err)
+					} else {
+						new_user := Mixinaccountindb{
+							Userid:     user.UserId,
+							Sessionid:  user.SessionId,
+							Pintoken:   user.PinToken,
+							Privatekey: user.PrivateKey,
+							Pin:        predefine_pin,
+						}
+						db.Create(&new_user)
+						result += fmt.Sprintf("new user created with record id: %v, user id: %v\n", new_user.ID, new_user.Userid)
+					}
+				case "listusers":
+					var allusers []Mixinaccountindb
+					db.Find(&allusers)
+					for _, v := range allusers {
+						result += fmt.Sprintf("user id: %v\n", v.Userid)
+					}
 
+				}
 			}
 			result += "allsnap: read all snap\n"
 			result += "status: ongoing search task\n"
