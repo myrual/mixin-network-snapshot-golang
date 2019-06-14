@@ -237,6 +237,7 @@ func main() {
 	var user_output_chan = make(chan string, 100)
 	var mixin_account_chan = make(chan MixinAccount, 100)
 	var pre_create_account_chan = make(chan uint, 10)
+	var create_req_chan = make(chan string, 10)
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
 		panic("failed to connect database")
@@ -339,6 +340,45 @@ func main() {
 			return
 		case new_user := <-mixin_account_chan:
 			db.Create(&new_user)
+		case unique_id := <-create_req_chan:
+			var notlinked_mixinaccount MixinAccount
+			var result string
+			db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
+			if notlinked_mixinaccount.ID != 0 {
+				new_req := ClientReq{
+					Callbackurl:    unique_id,
+					MixinAccountid: notlinked_mixinaccount.ID,
+				}
+				db.Create(&new_req)
+				db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
+				result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
+			} else {
+				pre_create_account_chan <- 1
+				//no avaible mixin account, create one now
+				const predefine_pin string = "123456"
+				user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
+				if err != nil {
+					log.Println(err)
+				} else {
+					new_user := MixinAccount{
+						Userid:      user.UserId,
+						Sessionid:   user.SessionId,
+						Pintoken:    user.PinToken,
+						Privatekey:  user.PrivateKey,
+						Pin:         predefine_pin,
+						ClientReqid: 0,
+					}
+					db.Create(&new_user)
+					new_req := ClientReq{
+						Callbackurl:    unique_id,
+						MixinAccountid: new_user.ID,
+					}
+					db.Create(&new_req)
+					db.Model(&new_user).Update(MixinAccount{ClientReqid: new_req.ID})
+					result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
+				}
+			}
+			user_output_chan <- result
 		case <-pre_create_account_chan:
 			var available_mixin_account int
 			db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
@@ -386,48 +426,12 @@ func main() {
 						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
 					}
 				case "createreq":
-					var unique_id string
 					if len(splited_string) > 1 {
-						unique_id = splited_string[1]
+						create_req_chan <- splited_string[1]
 					} else {
-						unique_id = "unique"
+						create_req_chan <- "fire"
 					}
-					var notlinked_mixinaccount MixinAccount
-					db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
-					if notlinked_mixinaccount.ID != 0 {
-						new_req := ClientReq{
-							Callbackurl:    unique_id,
-							MixinAccountid: notlinked_mixinaccount.ID,
-						}
-						db.Create(&new_req)
-						db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
-						result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
-					} else {
-						pre_create_account_chan <- 1
-						//no avaible mixin account, create one now
-						const predefine_pin string = "123456"
-						user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
-						if err != nil {
-							log.Println(err)
-						} else {
-							new_user := MixinAccount{
-								Userid:      user.UserId,
-								Sessionid:   user.SessionId,
-								Pintoken:    user.PinToken,
-								Privatekey:  user.PrivateKey,
-								Pin:         predefine_pin,
-								ClientReqid: 0,
-							}
-							db.Create(&new_user)
-							new_req := ClientReq{
-								Callbackurl:    unique_id,
-								MixinAccountid: new_user.ID,
-							}
-							db.Create(&new_req)
-							db.Model(&new_user).Update(MixinAccount{ClientReqid: new_req.ID})
-							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-						}
-					}
+
 				case "listreqs":
 					var allreqs []ClientReq
 					db.Find(&allreqs)
