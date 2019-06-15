@@ -302,8 +302,10 @@ func main() {
 	var user_output_chan = make(chan string, 100)
 	var mixin_account_chan = make(chan MixinAccount, 100)
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
-	var pre_create_account_chan = make(chan uint, 10)
-	var create_req_chan = make(chan string, 10)
+	var req_create_account_c = make(chan uint, 10)
+	var req_create_payment_chan = make(chan string, 10)
+	var req_read_deposit_chan = make(chan MixinAccount, 10)
+	timer1 := time.NewTimer(1 * time.Minute)
 
 	default_asset_id_group := []string{CNB_ASSET_ID, EOS_ASSET_ID}
 	db, err := gorm.Open("sqlite3", "test.db")
@@ -358,6 +360,8 @@ func main() {
 	promot += "your selection:"
 	user_output_chan <- promot
 	go user_interact(user_cmd_chan, user_output_chan)
+
+	req_create_account_c <- 1
 	for {
 		select {
 		case pv := <-progress_chan:
@@ -407,12 +411,13 @@ func main() {
 		case <-quit_chan:
 			log.Println("finished")
 			return
+		case mixin_account := <-req_read_deposit_chan:
+			for _, v := range default_asset_id_group {
+				go read_asset_deposit_address(v, mixin_account.Userid, mixin_account.Sessionid, mixin_account.Privatekey, mixin_deposit_chan)
+			}
 		case new_user := <-mixin_account_chan:
 			db.Create(&new_user)
-			for _, v := range default_asset_id_group {
-				go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
-			}
-
+			req_read_deposit_chan <- new_user
 		case asset_deposit_address_result := <-mixin_deposit_chan:
 			if asset_deposit_address_result.Error == nil {
 				deposit_address_db := DepositAddressindb{
@@ -427,7 +432,7 @@ func main() {
 				db.Create(&deposit_address_db)
 			}
 
-		case unique_id := <-create_req_chan:
+		case unique_id := <-req_create_payment_chan:
 			var notlinked_mixinaccount MixinAccount
 			var result string
 			db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
@@ -440,7 +445,7 @@ func main() {
 				db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
 				result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
 			} else {
-				pre_create_account_chan <- 1
+				req_create_account_c <- 1
 				//no avaible mixin account, create one now
 				const predefine_pin string = "123456"
 				user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
@@ -469,7 +474,9 @@ func main() {
 				}
 			}
 			user_output_chan <- result
-		case <-pre_create_account_chan:
+		case <-timer1.C:
+			req_create_account_c <- 1
+		case <-req_create_account_c:
 			var available_mixin_account int
 			db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
 			if available_mixin_account < 10 {
@@ -517,7 +524,7 @@ func main() {
 					}
 				case "createreq":
 					if len(splited_string) > 1 {
-						create_req_chan <- splited_string[1]
+						req_create_payment_chan <- splited_string[1]
 					}
 
 				case "listreqs":
@@ -569,7 +576,6 @@ func main() {
 							}
 						}
 					}
-					pre_create_account_chan <- 1
 				}
 			}
 			result += "allsnap: read all snap\n"
