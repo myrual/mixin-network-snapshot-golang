@@ -304,6 +304,8 @@ func main() {
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
 	var pre_create_account_chan = make(chan uint, 10)
 	var create_req_chan = make(chan string, 10)
+
+	default_asset_id_group := []string{CNB_ASSET_ID, EOS_ASSET_ID}
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
 		panic("failed to connect database")
@@ -407,7 +409,10 @@ func main() {
 			return
 		case new_user := <-mixin_account_chan:
 			db.Create(&new_user)
-			go read_asset_deposit_address(CNB_ASSET_ID, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+			for _, v := range default_asset_id_group {
+				go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+			}
+
 		case asset_deposit_address_result := <-mixin_deposit_chan:
 			if asset_deposit_address_result.Error == nil {
 				deposit_address_db := DepositAddressindb{
@@ -458,7 +463,9 @@ func main() {
 					db.Create(&new_req)
 					db.Model(&new_user).Update(MixinAccount{ClientReqid: new_req.ID})
 					result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-					go read_asset_deposit_address(CNB_ASSET_ID, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+					for _, v := range default_asset_id_group {
+						go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+					}
 				}
 			}
 			user_output_chan <- result
