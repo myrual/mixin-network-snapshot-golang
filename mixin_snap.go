@@ -366,7 +366,7 @@ func main() {
 	var mixin_account_chan = make(chan MixinAccountindb, 100)
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
-	var should_read_deposit_c = make(chan MixinAccountindb, 10)
+
 	timer1 := time.NewTimer(1 * time.Minute)
 
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
@@ -490,6 +490,8 @@ func main() {
 					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
 				}
 			}
+
+			//read all free account, and check all deposit address is ready
 			for _, account := range free_mixinaccounts {
 				var payment_addresses []DepositAddressindb
 				db.Where(&DepositAddressindb{Accountrecord_id: account.ID}).Find(&payment_addresses)
