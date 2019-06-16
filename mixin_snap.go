@@ -630,6 +630,10 @@ func main() {
 							}
 						}
 					}
+				case "lastsnap":
+					var lastsnap Snapshotindb
+					db.Last(&lastsnap)
+					result += fmt.Sprintf("at %v %v %v", lastsnap.CreatedAt, lastsnap.Amount, lastsnap.AssetId)
 				}
 			}
 			result += "allsnap: read all snap\n"
