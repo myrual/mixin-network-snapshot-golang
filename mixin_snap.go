@@ -367,8 +367,6 @@ func main() {
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
 	var checkremain_account_c = make(chan uint, 10)
 	var checkaccount_deposit_c = make(chan MixinAccountindb, 10)
-	var req_create_payment_chan = make(chan string, 10)
-	var req_read_deposit_chan = make(chan MixinAccountindb, 10)
 	timer1 := time.NewTimer(1 * time.Minute)
 
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
@@ -450,19 +448,17 @@ func main() {
 		case <-quit_chan:
 			log.Println("finished")
 			return
-		case mixin_account := <-req_read_deposit_chan:
+
+		case new_user := <-mixin_account_chan:
+			db.Create(&new_user)
 			for _, v := range default_asset_id_group {
 				depositRecord := DepositAddressindb{
-					Accountrecord_id: mixin_account.ID,
+					Accountrecord_id: new_user.ID,
 					Assetid:          v,
 				}
 				db.Create(&depositRecord)
-				go read_asset_deposit_address(v, mixin_account.Userid, mixin_account.Sessionid, mixin_account.Privatekey, mixin_deposit_chan)
+				go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
 			}
-		case new_user := <-mixin_account_chan:
-			db.Create(&new_user)
-
-			req_read_deposit_chan <- new_user
 		case asset_deposit_address_result := <-mixin_deposit_chan:
 			if asset_deposit_address_result.Error == nil {
 				var matched_user MixinAccountindb
@@ -481,48 +477,6 @@ func main() {
 				}
 			}
 
-		case unique_id := <-req_create_payment_chan:
-			var notlinked_mixinaccount MixinAccountindb
-			var result string
-			db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
-			if notlinked_mixinaccount.ID != 0 {
-				new_req := ClientReq{
-					Callbackurl:    unique_id,
-					MixinAccountid: notlinked_mixinaccount.ID,
-				}
-				db.Create(&new_req)
-				notlinked_mixinaccount.ClientReqid = new_req.ID
-				db.Save(&notlinked_mixinaccount)
-				result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
-			} else {
-				checkremain_account_c <- 1
-				//no avaible mixin account, create one in blockin mode
-				const predefine_pin string = "123456"
-				user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
-				if err != nil {
-					log.Println(err)
-				} else {
-					new_user := MixinAccountindb{
-						Userid:      user.UserId,
-						Sessionid:   user.SessionId,
-						Pintoken:    user.PinToken,
-						Privatekey:  user.PrivateKey,
-						Pin:         predefine_pin,
-						ClientReqid: 0,
-					}
-					db.Create(&new_user)
-					new_req := ClientReq{
-						Callbackurl:    unique_id,
-						MixinAccountid: new_user.ID,
-					}
-					db.Create(&new_req)
-					new_user.ClientReqid = new_req.ID
-					db.Save(&new_user)
-					result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-					req_read_deposit_chan <- new_user
-				}
-			}
-			user_output_chan <- result
 		case <-timer1.C:
 			checkremain_account_c <- 1
 		case tocheck_account := <-checkaccount_deposit_c:
@@ -530,12 +484,23 @@ func main() {
 				go read_asset_deposit_address(v, tocheck_account.Userid, tocheck_account.Sessionid, tocheck_account.Privatekey, mixin_deposit_chan)
 			}
 		case <-checkremain_account_c:
-			var available_mixin_account int
-			db.Model(&MixinAccountindb{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
+			var free_mixinaccounts []MixinAccountindb
+			db.Model(&MixinAccountindb{}).Where("client_reqid = ?", "0").Find(&free_mixinaccounts)
+			available_mixin_account := len(free_mixinaccounts)
 			if available_mixin_account < 10 {
 				for i := 20; i > available_mixin_account; i-- {
 					const predefine_pin string = "123456"
 					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
+				}
+			}
+			for _, account := range free_mixinaccounts {
+				var payment_addresses []DepositAddressindb
+				db.Where(&DepositAddressindb{Accountrecord_id: account.ID}).Find(&payment_addresses)
+				for _, payment_address := range payment_addresses {
+					if payment_address.Publicaddress == "" && payment_address.Accountname == "" && payment_address.Accounttag == "" {
+						log.Println("some account deposit address is still missing")
+						go read_asset_deposit_address(payment_address.Assetid, account.Userid, account.Sessionid, account.Privatekey, mixin_deposit_chan)
+					}
 				}
 			}
 
@@ -575,11 +540,65 @@ func main() {
 					for _, v := range users_snap {
 						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
 					}
-				case "createreq":
+				case "createpayment":
 					if len(splited_string) > 1 {
-						req_create_payment_chan <- splited_string[1]
+						unique_id := splited_string[1]
+						var notlinked_mixinaccount MixinAccountindb
+						db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
+						if notlinked_mixinaccount.ID != 0 {
+							new_req := ClientReq{
+								Callbackurl:    unique_id,
+								MixinAccountid: notlinked_mixinaccount.ID,
+							}
+							db.Create(&new_req)
+							notlinked_mixinaccount.ClientReqid = new_req.ID
+							db.Save(&notlinked_mixinaccount)
+							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
+							var payment_addresses []DepositAddressindb
+							db.Where(&DepositAddressindb{Accountrecord_id: notlinked_mixinaccount.ID}).Find(&payment_addresses)
+							for _, v := range payment_addresses {
+								if v.Publicaddress != "" {
+									result += fmt.Sprintf("Asset : %v Payment address %v\n", v.Assetid, v.Publicaddress)
+								} else {
+									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
+								}
+							}
+						} else {
+							checkremain_account_c <- 1
+							//no avaible mixin account, create one in blockin mode
+							const predefine_pin string = "123456"
+							user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
+							if err != nil {
+								log.Println(err)
+							} else {
+								new_user := MixinAccountindb{
+									Userid:      user.UserId,
+									Sessionid:   user.SessionId,
+									Pintoken:    user.PinToken,
+									Privatekey:  user.PrivateKey,
+									Pin:         predefine_pin,
+									ClientReqid: 0,
+								}
+								db.Create(&new_user)
+								new_req := ClientReq{
+									Callbackurl:    unique_id,
+									MixinAccountid: new_user.ID,
+								}
+								db.Create(&new_req)
+								new_user.ClientReqid = new_req.ID
+								db.Save(&new_user)
+								for _, v := range default_asset_id_group {
+									depositRecord := DepositAddressindb{
+										Accountrecord_id: new_user.ID,
+										Assetid:          v,
+									}
+									db.Create(&depositRecord)
+									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+								}
+								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
+							}
+						}
 					}
-
 				case "listreqs":
 					var allreqs []ClientReq
 					db.Find(&allreqs)
