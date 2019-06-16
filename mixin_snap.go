@@ -365,8 +365,8 @@ func main() {
 	var user_output_chan = make(chan string, 100)
 	var mixin_account_chan = make(chan MixinAccountindb, 100)
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
-	var checkremain_account_c = make(chan uint, 10)
-	var checkaccount_deposit_c = make(chan MixinAccountindb, 10)
+	var should_create_more_account_c = make(chan uint, 10)
+	var should_read_deposit_c = make(chan MixinAccountindb, 10)
 	timer1 := time.NewTimer(1 * time.Minute)
 
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
@@ -396,7 +396,7 @@ func main() {
 	user_output_chan <- promot
 	go user_interact(user_cmd_chan, user_output_chan)
 
-	checkremain_account_c <- 1
+	should_create_more_account_c <- 1
 	for {
 		select {
 		case pv := <-progress_chan:
@@ -478,12 +478,9 @@ func main() {
 			}
 
 		case <-timer1.C:
-			checkremain_account_c <- 1
-		case tocheck_account := <-checkaccount_deposit_c:
-			for _, v := range default_asset_id_group {
-				go read_asset_deposit_address(v, tocheck_account.Userid, tocheck_account.Sessionid, tocheck_account.Privatekey, mixin_deposit_chan)
-			}
-		case <-checkremain_account_c:
+			should_create_more_account_c <- 1
+
+		case <-should_create_more_account_c:
 			var free_mixinaccounts []MixinAccountindb
 			db.Model(&MixinAccountindb{}).Where("client_reqid = ?", "0").Find(&free_mixinaccounts)
 			available_mixin_account := len(free_mixinaccounts)
@@ -543,19 +540,19 @@ func main() {
 				case "createpayment":
 					if len(splited_string) > 1 {
 						unique_id := splited_string[1]
-						var notlinked_mixinaccount MixinAccountindb
-						db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
-						if notlinked_mixinaccount.ID != 0 {
+						var free_mixinaccount MixinAccountindb
+						db.Where("client_reqid = ?", "0").First(&free_mixinaccount)
+						if free_mixinaccount.ID != 0 {
 							new_req := ClientReq{
 								Callbackurl:    unique_id,
-								MixinAccountid: notlinked_mixinaccount.ID,
+								MixinAccountid: free_mixinaccount.ID,
 							}
 							db.Create(&new_req)
-							notlinked_mixinaccount.ClientReqid = new_req.ID
-							db.Save(&notlinked_mixinaccount)
-							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
+							free_mixinaccount.ClientReqid = new_req.ID
+							db.Save(&free_mixinaccount)
+							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", free_mixinaccount.ID, free_mixinaccount.Userid, new_req.ID)
 							var payment_addresses []DepositAddressindb
-							db.Where(&DepositAddressindb{Accountrecord_id: notlinked_mixinaccount.ID}).Find(&payment_addresses)
+							db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
 							for _, v := range payment_addresses {
 								if v.Publicaddress != "" {
 									result += fmt.Sprintf("Asset : %v Payment address %v\n", v.Assetid, v.Publicaddress)
@@ -564,8 +561,9 @@ func main() {
 								}
 							}
 						} else {
-							checkremain_account_c <- 1
-							//no avaible mixin account, create one in blockin mode
+							//no avaible mixin account, create more by send channel
+							should_create_more_account_c <- 1
+							//create one in blocking mode
 							const predefine_pin string = "123456"
 							user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
 							if err != nil {
