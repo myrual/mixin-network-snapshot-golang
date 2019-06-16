@@ -90,13 +90,13 @@ type MixinAccountindb struct {
 
 type DepositAddressindb struct {
 	gorm.Model
-	Accountuuid   string
-	Assetid       string
-	Publicaddress string
-	Accountname   string
-	Accounttag    string
-	Iconurl       string
-	Confirmblock  uint
+	Accountrecord_id uint
+	Assetid          string
+	Publicaddress    string
+	Accountname      string
+	Accounttag       string
+	Iconurl          string
+	Confirmblock     uint
 }
 
 type ClientReq struct {
@@ -389,7 +389,9 @@ func main() {
 				}
 				db.Create(&this_record)
 			} else {
-				db.Model(&searchtaskindb).Update(Searchtaskindb{Lasttime: pv.search_task.last_t, Ongoing: pv.search_task.ongoing})
+				searchtaskindb.Lasttime = pv.search_task.last_t
+				searchtaskindb.Ongoing = pv.search_task.ongoing
+				db.Save(&searchtaskindb)
 			}
 		case v := <-my_snapshot_chan:
 			snapInDb := Snapshotindb{
@@ -415,26 +417,32 @@ func main() {
 			return
 		case mixin_account := <-req_read_deposit_chan:
 			for _, v := range default_asset_id_group {
+				depositRecord := DepositAddressindb{
+					Accountrecord_id: mixin_account.ID,
+					Assetid:          v,
+				}
+				db.Create(&depositRecord)
 				go read_asset_deposit_address(v, mixin_account.Userid, mixin_account.Sessionid, mixin_account.Privatekey, mixin_deposit_chan)
 			}
 		case new_user := <-mixin_account_chan:
 			db.Create(&new_user)
+
 			req_read_deposit_chan <- new_user
 		case asset_deposit_address_result := <-mixin_deposit_chan:
 			if asset_deposit_address_result.Error == nil {
+				var matched_user MixinAccountindb
+				db.Where(&MixinAccountindb{Userid: asset_deposit_address_result.Accountid}).First(&matched_user)
 				var depositRecord DepositAddressindb
-				db.Where("accountid_id = ?", asset_deposit_address_result.Accountid).Where("assetid = ?", asset_deposit_address_result.Assetid).First(&depositRecord)
+				db.Where("accountrecord_id = ?", matched_user.ID).Where("assetid = ?", asset_deposit_address_result.Assetid).First(&depositRecord)
 				if depositRecord.CreatedAt.IsZero() {
-					deposit_address_db := DepositAddressindb{
-						Accountuuid:   asset_deposit_address_result.Accountid,
-						Assetid:       asset_deposit_address_result.Assetid,
-						Publicaddress: asset_deposit_address_result.MixinResponse.Data.PublicKey,
-						Accountname:   asset_deposit_address_result.MixinResponse.Data.AccountName,
-						Accounttag:    asset_deposit_address_result.MixinResponse.Data.AccountTag,
-						Confirmblock:  asset_deposit_address_result.MixinResponse.Data.Confirmblock,
-						Iconurl:       asset_deposit_address_result.MixinResponse.Data.IconURL,
-					}
-					db.Create(&deposit_address_db)
+					panic("The record should has been created when the user is created")
+				} else {
+					depositRecord.Publicaddress = asset_deposit_address_result.MixinResponse.Data.PublicKey
+					depositRecord.Accountname = asset_deposit_address_result.MixinResponse.Data.AccountName
+					depositRecord.Accounttag = asset_deposit_address_result.MixinResponse.Data.AccountTag
+					depositRecord.Confirmblock = asset_deposit_address_result.MixinResponse.Data.Confirmblock
+					depositRecord.Iconurl = asset_deposit_address_result.MixinResponse.Data.IconURL
+					db.Save(&depositRecord)
 				}
 			}
 
@@ -448,11 +456,12 @@ func main() {
 					MixinAccountid: notlinked_mixinaccount.ID,
 				}
 				db.Create(&new_req)
-				db.Model(&notlinked_mixinaccount).Update(MixinAccountindb{ClientReqid: new_req.ID})
+				notlinked_mixinaccount.ClientReqid = new_req.ID
+				db.Save(&notlinked_mixinaccount)
 				result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
 			} else {
 				checkremain_account_c <- 1
-				//no avaible mixin account, create one now
+				//no avaible mixin account, create one in blockin mode
 				const predefine_pin string = "123456"
 				user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
 				if err != nil {
@@ -472,11 +481,10 @@ func main() {
 						MixinAccountid: new_user.ID,
 					}
 					db.Create(&new_req)
-					db.Model(&new_user).Update(MixinAccountindb{ClientReqid: new_req.ID})
+					new_user.ClientReqid = new_req.ID
+					db.Save(&new_user)
 					result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-					for _, v := range default_asset_id_group {
-						go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
-					}
+					req_read_deposit_chan <- new_user
 				}
 			}
 			user_output_chan <- result
@@ -553,7 +561,7 @@ func main() {
 						if mixin_account.ID != 0 {
 							result += fmt.Sprintf("Record found : %v user id %v\n", req.Callbackurl, mixin_account.Userid)
 							var payment_addresses []DepositAddressindb
-							db.Where("Accountuuid = ?", mixin_account.Userid).Find(&payment_addresses)
+							db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID}).Find(&payment_addresses)
 							for _, v := range payment_addresses {
 								if v.Publicaddress != "" {
 									result += fmt.Sprintf("Asset : %v Payment address %v\n", v.Assetid, v.Publicaddress)
@@ -577,7 +585,7 @@ func main() {
 					for _, v := range allaccount {
 						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
 						var payment_addresses []DepositAddressindb
-						db.Where(&DepositAddressindb{Accountuuid: v.Userid}).Find(&payment_addresses)
+						db.Where(&DepositAddressindb{Accountrecord_id: v.ID}).Find(&payment_addresses)
 						for _, add := range payment_addresses {
 							if add.Publicaddress != "" {
 								result += fmt.Sprintf("Asset : %v Payment address %v\n", add.Assetid, add.Publicaddress)
