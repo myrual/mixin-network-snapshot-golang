@@ -240,7 +240,6 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 	req_task.last_t = req_task.start_t
 	for {
 		snaps, err := mixin.NetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
-
 		if err != nil {
 			progress_chan <- Searchprogress{
 				Error: err,
@@ -390,9 +389,9 @@ func main() {
 		session_id:  sessionid,
 		private_key: private_key,
 	}
-	var searchtasks_array_indb []Searchtaskindb
-	db.Find(&searchtasks_array_indb)
-	restore_searchsnap(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, searchtasks_array_indb)
+	var ongoing_searchtasks_indb []Searchtaskindb
+	db.Find(&ongoing_searchtasks_indb)
+	restore_searchsnap(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, ongoing_searchtasks_indb)
 	promot := "allsnap: read all snap\n"
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
