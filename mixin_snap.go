@@ -321,6 +321,43 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	}
 }
 
+func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
+	log.Println("Total ", len(searchtasks_array_indb), " search task")
+	if len(searchtasks_array_indb) > 0 {
+		for _, v := range searchtasks_array_indb {
+			if v.Ongoing == true {
+				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Lasttime)
+				unfinished_req_task := Searchtask{
+					start_t:         v.Starttime,
+					end_t:           v.Endtime,
+					last_t:          v.Lasttime,
+					yesterday2today: v.Yesterday2today,
+					asset_id:        v.Assetid,
+					ongoing:         v.Ongoing,
+				}
+				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
+			}
+		}
+	} else {
+		botCreateAt := read_bot_created_time(user_config.user_id, user_config.session_id, user_config.private_key)
+		if botCreateAt.IsZero() {
+			panic("Read bot profile failed")
+		} else {
+			log.Println("I am created at ", botCreateAt)
+			for _, v := range default_asset_id_group {
+				req_task := Searchtask{
+					start_t:         botCreateAt,
+					max_len:         500,
+					yesterday2today: true,
+					asset_id:        v,
+				}
+				log.Println("fire read snap for asset id", v)
+				go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+			}
+		}
+	}
+}
+
 func main() {
 	var my_snapshot_chan = make(chan *Snapshot, 1000)
 	var progress_chan = make(chan Searchprogress, 1000)
@@ -353,45 +390,9 @@ func main() {
 		session_id:  sessionid,
 		private_key: private_key,
 	}
-
-	//restore our search snap task
 	var searchtasks_array_indb []Searchtaskindb
 	db.Find(&searchtasks_array_indb)
-	log.Println("Total ", len(searchtasks_array_indb), " search task")
-	if len(searchtasks_array_indb) > 0 {
-		for _, v := range searchtasks_array_indb {
-
-			if v.Ongoing == true {
-				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Lasttime)
-				unfinished_req_task := Searchtask{
-					start_t:         v.Starttime,
-					end_t:           v.Endtime,
-					last_t:          v.Lasttime,
-					yesterday2today: v.Yesterday2today,
-					asset_id:        v.Assetid,
-					ongoing:         v.Ongoing,
-				}
-				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
-			}
-		}
-	} else {
-		botCreateAt := read_bot_created_time(user_config.user_id, user_config.session_id, user_config.private_key)
-		if botCreateAt.IsZero() {
-			panic("Read bot profile failed")
-		} else {
-			log.Println("I am created at ", botCreateAt)
-			for _, v := range default_asset_id_group {
-				req_task := Searchtask{
-					start_t:         botCreateAt,
-					max_len:         500,
-					yesterday2today: true,
-					asset_id:        v,
-				}
-				log.Println("fire read snap for asset id", v)
-				go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan)
-			}
-		}
-	}
+	restore_searchsnap(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, searchtasks_array_indb)
 	promot := "allsnap: read all snap\n"
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
