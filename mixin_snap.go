@@ -78,7 +78,7 @@ type Snapshotindb struct {
 	Data          string
 }
 
-type MixinAccount struct {
+type MixinAccountindb struct {
 	gorm.Model
 	Userid      string `gorm:"primary_key"`
 	Sessionid   string
@@ -163,6 +163,7 @@ const (
 	BCH_ASSET_ID  = "fd11b6e3-0b87-41f1-a41f-f0e9b49e5bf0"
 	XIN_ASSET_ID  = "c94ac88f-4671-3976-b60a-09064f1811e8"
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
+	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -276,12 +277,12 @@ func user_interact(cmd_c chan string, output_c chan string) {
 	}
 }
 
-func create_mixin_account(account_name string, predefine_pin string, user_id string, session_id string, private_key string, result_chan chan MixinAccount) {
+func create_mixin_account(account_name string, predefine_pin string, user_id string, session_id string, private_key string, result_chan chan MixinAccountindb) {
 	user, err := mixin.CreateAppUser(account_name, predefine_pin, user_id, session_id, private_key)
 	if err != nil {
 		log.Println(err)
 	} else {
-		new_user := MixinAccount{
+		new_user := MixinAccountindb{
 			Userid:      user.UserId,
 			Sessionid:   user.SessionId,
 			Pintoken:    user.PinToken,
@@ -300,14 +301,15 @@ func main() {
 	var quit_chan = make(chan int, 2)
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
-	var mixin_account_chan = make(chan MixinAccount, 100)
+	var mixin_account_chan = make(chan MixinAccountindb, 100)
 	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
-	var req_create_account_c = make(chan uint, 10)
+	var checkremain_account_c = make(chan uint, 10)
+	var checkaccount_deposit_c = make(chan MixinAccountindb, 10)
 	var req_create_payment_chan = make(chan string, 10)
-	var req_read_deposit_chan = make(chan MixinAccount, 10)
+	var req_read_deposit_chan = make(chan MixinAccountindb, 10)
 	timer1 := time.NewTimer(1 * time.Minute)
 
-	default_asset_id_group := []string{CNB_ASSET_ID, EOS_ASSET_ID}
+	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
 		panic("failed to connect database")
@@ -316,7 +318,7 @@ func main() {
 
 	db.AutoMigrate(&Snapshotindb{})
 	db.AutoMigrate(&Searchtaskindb{})
-	db.AutoMigrate(&MixinAccount{})
+	db.AutoMigrate(&MixinAccountindb{})
 	db.AutoMigrate(&ClientReq{})
 	db.AutoMigrate(&DepositAddressindb{})
 
@@ -361,7 +363,7 @@ func main() {
 	user_output_chan <- promot
 	go user_interact(user_cmd_chan, user_output_chan)
 
-	req_create_account_c <- 1
+	checkremain_account_c <- 1
 	for {
 		select {
 		case pv := <-progress_chan:
@@ -420,20 +422,24 @@ func main() {
 			req_read_deposit_chan <- new_user
 		case asset_deposit_address_result := <-mixin_deposit_chan:
 			if asset_deposit_address_result.Error == nil {
-				deposit_address_db := DepositAddressindb{
-					Accountuuid:   asset_deposit_address_result.Accountid,
-					Assetid:       asset_deposit_address_result.Assetid,
-					Publicaddress: asset_deposit_address_result.MixinResponse.Data.PublicKey,
-					Accountname:   asset_deposit_address_result.MixinResponse.Data.AccountName,
-					Accounttag:    asset_deposit_address_result.MixinResponse.Data.AccountTag,
-					Confirmblock:  asset_deposit_address_result.MixinResponse.Data.Confirmblock,
-					Iconurl:       asset_deposit_address_result.MixinResponse.Data.IconURL,
+				var depositRecord DepositAddressindb
+				db.Where("accountid_id = ?", asset_deposit_address_result.Accountid).Where("assetid = ?", asset_deposit_address_result.Assetid).First(&depositRecord)
+				if depositRecord.CreatedAt.IsZero() {
+					deposit_address_db := DepositAddressindb{
+						Accountuuid:   asset_deposit_address_result.Accountid,
+						Assetid:       asset_deposit_address_result.Assetid,
+						Publicaddress: asset_deposit_address_result.MixinResponse.Data.PublicKey,
+						Accountname:   asset_deposit_address_result.MixinResponse.Data.AccountName,
+						Accounttag:    asset_deposit_address_result.MixinResponse.Data.AccountTag,
+						Confirmblock:  asset_deposit_address_result.MixinResponse.Data.Confirmblock,
+						Iconurl:       asset_deposit_address_result.MixinResponse.Data.IconURL,
+					}
+					db.Create(&deposit_address_db)
 				}
-				db.Create(&deposit_address_db)
 			}
 
 		case unique_id := <-req_create_payment_chan:
-			var notlinked_mixinaccount MixinAccount
+			var notlinked_mixinaccount MixinAccountindb
 			var result string
 			db.Where("client_reqid = ?", "0").First(&notlinked_mixinaccount)
 			if notlinked_mixinaccount.ID != 0 {
@@ -442,17 +448,17 @@ func main() {
 					MixinAccountid: notlinked_mixinaccount.ID,
 				}
 				db.Create(&new_req)
-				db.Model(&notlinked_mixinaccount).Update(MixinAccount{ClientReqid: new_req.ID})
+				db.Model(&notlinked_mixinaccount).Update(MixinAccountindb{ClientReqid: new_req.ID})
 				result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", notlinked_mixinaccount.ID, notlinked_mixinaccount.Userid, new_req.ID)
 			} else {
-				req_create_account_c <- 1
+				checkremain_account_c <- 1
 				//no avaible mixin account, create one now
 				const predefine_pin string = "123456"
 				user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
 				if err != nil {
 					log.Println(err)
 				} else {
-					new_user := MixinAccount{
+					new_user := MixinAccountindb{
 						Userid:      user.UserId,
 						Sessionid:   user.SessionId,
 						Pintoken:    user.PinToken,
@@ -466,7 +472,7 @@ func main() {
 						MixinAccountid: new_user.ID,
 					}
 					db.Create(&new_req)
-					db.Model(&new_user).Update(MixinAccount{ClientReqid: new_req.ID})
+					db.Model(&new_user).Update(MixinAccountindb{ClientReqid: new_req.ID})
 					result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
 					for _, v := range default_asset_id_group {
 						go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
@@ -475,10 +481,14 @@ func main() {
 			}
 			user_output_chan <- result
 		case <-timer1.C:
-			req_create_account_c <- 1
-		case <-req_create_account_c:
+			checkremain_account_c <- 1
+		case tocheck_account := <-checkaccount_deposit_c:
+			for _, v := range default_asset_id_group {
+				go read_asset_deposit_address(v, tocheck_account.Userid, tocheck_account.Sessionid, tocheck_account.Privatekey, mixin_deposit_chan)
+			}
+		case <-checkremain_account_c:
 			var available_mixin_account int
-			db.Model(&MixinAccount{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
+			db.Model(&MixinAccountindb{}).Where("client_reqid = ?", "0").Count(&available_mixin_account)
 			if available_mixin_account < 10 {
 				for i := 20; i > available_mixin_account; i-- {
 					const predefine_pin string = "123456"
@@ -538,7 +548,7 @@ func main() {
 					var req ClientReq
 					db.Where(&ClientReq{Callbackurl: payment_id}).Find(&req)
 					if req.ID != 0 {
-						var mixin_account MixinAccount
+						var mixin_account MixinAccountindb
 						db.Find(&mixin_account, req.MixinAccountid)
 						if mixin_account.ID != 0 {
 							result += fmt.Sprintf("Record found : %v user id %v\n", req.Callbackurl, mixin_account.Userid)
@@ -562,7 +572,7 @@ func main() {
 					const predefine_pin string = "123456"
 					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
 				case "listusers":
-					var allaccount []MixinAccount
+					var allaccount []MixinAccountindb
 					db.Find(&allaccount)
 					for _, v := range allaccount {
 						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
