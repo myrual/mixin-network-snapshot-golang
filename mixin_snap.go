@@ -363,8 +363,8 @@ func main() {
 	var quit_chan = make(chan int, 2)
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
-	var mixin_account_chan = make(chan MixinAccountindb, 100)
-	var mixin_deposit_chan = make(chan DepositNetResponse, 100)
+	var new_account_received_chan = make(chan MixinAccountindb, 100)
+	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
 
 	timer1 := time.NewTimer(1 * time.Minute)
@@ -449,7 +449,7 @@ func main() {
 			log.Println("finished")
 			return
 
-		case new_user := <-mixin_account_chan:
+		case new_user := <-new_account_received_chan:
 			db.Create(&new_user)
 			for _, v := range default_asset_id_group {
 				depositRecord := DepositAddressindb{
@@ -457,9 +457,9 @@ func main() {
 					Assetid:          v,
 				}
 				db.Create(&depositRecord)
-				go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+				go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, account_deposit_address_receive_chan)
 			}
-		case asset_deposit_address_result := <-mixin_deposit_chan:
+		case asset_deposit_address_result := <-account_deposit_address_receive_chan:
 			if asset_deposit_address_result.Error == nil {
 				var matched_user MixinAccountindb
 				db.Where(&MixinAccountindb{Userid: asset_deposit_address_result.Accountid}).First(&matched_user)
@@ -487,7 +487,7 @@ func main() {
 			if available_mixin_account < 10 {
 				for i := 20; i > available_mixin_account; i-- {
 					const predefine_pin string = "123456"
-					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
+					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
 				}
 			}
 
@@ -498,7 +498,7 @@ func main() {
 				for _, payment_address := range payment_addresses {
 					if payment_address.Publicaddress == "" && payment_address.Accountname == "" && payment_address.Accounttag == "" {
 						log.Println("some account deposit address is still missing")
-						go read_asset_deposit_address(payment_address.Assetid, account.Userid, account.Sessionid, account.Privatekey, mixin_deposit_chan)
+						go read_asset_deposit_address(payment_address.Assetid, account.Userid, account.Sessionid, account.Privatekey, account_deposit_address_receive_chan)
 					}
 				}
 			}
@@ -593,7 +593,7 @@ func main() {
 										Assetid:          v,
 									}
 									db.Create(&depositRecord)
-									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, mixin_deposit_chan)
+									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, account_deposit_address_receive_chan)
 								}
 								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
 							}
@@ -632,7 +632,7 @@ func main() {
 					}
 				case "createuser":
 					const predefine_pin string = "123456"
-					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, mixin_account_chan)
+					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
 				case "listusers":
 					var allaccount []MixinAccountindb
 					db.Find(&allaccount)
