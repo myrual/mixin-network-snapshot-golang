@@ -328,6 +328,59 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 	}
 }
 
+func read_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress) {
+	req_task.last_t = req_task.start_t
+	for {
+		snaps, err := mixin.NetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
+		if err != nil {
+			progress_chan <- Searchprogress{
+				Error: err,
+			}
+			continue
+		}
+
+		var resp MixinResponse
+		err = json.Unmarshal(snaps, &resp)
+
+		if err != nil {
+			progress_chan <- Searchprogress{
+				Error: err,
+			}
+			continue
+		}
+		if resp.Error != "" {
+			log.Println("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+			return
+		}
+		for _, v := range resp.Data {
+			if v.UserId != "" {
+				result_chan <- v
+			}
+		}
+		len_of_snap := len(resp.Data)
+		if len_of_snap == 0 {
+			log.Println("No ", req_task.asset_id, "After ", req_task.last_t)
+			time.Sleep(60 * time.Second)
+			continue
+		}
+		last_element := resp.Data[len(resp.Data)-1]
+		req_task.last_t = last_element.CreatedAt
+		p := Searchprogress{
+			search_task: req_task,
+		}
+		if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
+			p.search_task.ongoing = false
+			progress_chan <- p
+			return
+		}
+		p.search_task.ongoing = true
+		progress_chan <- p
+		if len_of_snap < req_task.max_len {
+			time.Sleep(60 * time.Second)
+		}
+	}
+}
+
 func user_interact(cmd_c chan string, output_c chan string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	var cmd string
@@ -371,7 +424,7 @@ func search_income_for_payment(user_config BotConfig, my_snapshot_chan chan *Sna
 			payment_id:      payment_id,
 		}
 		log.Println("fire read snap for asset id", v)
-		go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+		go read_snap(req_task, user_config, my_snapshot_chan, progress_chan)
 	}
 }
 func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
@@ -390,7 +443,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					payment_id:      v.Paymentid,
 				}
 				log.Printf("asset %v start at %v to %v last at %v", unfinished_req_task.asset_id, unfinished_req_task.start_t, unfinished_req_task.end_t, unfinished_req_task.last_t)
-				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
+				go read_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
 			}
 		}
 	} else {
@@ -407,7 +460,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					asset_id:        v,
 				}
 				log.Println("fire read snap for asset id", v)
-				go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+				go read_snap(req_task, user_config, my_snapshot_chan, progress_chan)
 			}
 		}
 	}
@@ -461,7 +514,6 @@ func main() {
 				log.Println(pv.Error)
 				continue
 			}
-			log.Println(pv)
 			searchtaskindb := Searchtaskindb{}
 			query_task := Searchtaskindb{
 				Starttime: pv.search_task.start_t,
