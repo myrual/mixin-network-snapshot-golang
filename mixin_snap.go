@@ -306,6 +306,7 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 		}
 		len_of_snap := len(resp.Data)
 		if len_of_snap == 0 {
+			log.Println("No ", req_task.asset_id, "After ", req_task.last_t)
 			time.Sleep(60 * time.Second)
 			continue
 		}
@@ -388,6 +389,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					ongoing:         v.Ongoing,
 					payment_id:      v.Paymentid,
 				}
+				log.Printf("asset %v start at %v to %v last at %v", unfinished_req_task.asset_id, unfinished_req_task.start_t, unfinished_req_task.end_t, unfinished_req_task.last_t)
 				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
 			}
 		}
