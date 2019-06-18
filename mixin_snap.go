@@ -12,6 +12,7 @@ import (
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -106,6 +107,7 @@ type ClientReq struct {
 	gorm.Model
 	Callbackurl    string
 	MixinAccountid uint
+	Callbackfired  bool
 }
 
 type Searchtaskindb struct {
@@ -116,6 +118,7 @@ type Searchtaskindb struct {
 	Yesterday2today bool
 	Assetid         string
 	Ongoing         bool
+	Paymentid       uint
 }
 
 type BotConfig struct {
@@ -134,6 +137,38 @@ type MixinResponse struct {
 	Error string      `json:"error"`
 }
 
+type TransferNetRespone struct {
+	TransferRes TransferResponse
+	Error       error
+}
+type TransferResponse struct {
+	Data  *Transfer `json:"data"`
+	Error string    `json:"error"`
+}
+type Transfer struct {
+	Optype         string `json:"type"`
+	Snapshotid     string `json:"snapshot_id"`
+	OpponentId     string `json:"opponent_id"`
+	Assetid        string `json:"asset_id"`
+	Amount         string `json:"amount"`
+	Memo           string `json:"memo"`
+	Snap_createdat string `json:"created_at"`
+}
+
+type BalanceNetResponse struct {
+	Balance BalanceResponse
+	Error   error
+}
+type BalanceResponse struct {
+	Data  []*Asset `json:"data"`
+	Error string   `json:"error"`
+}
+
+type Asset struct {
+	Optype  string `json:"type"`
+	Assetid string `json:"asset_id"`
+	Balance string `json:"balance"`
+}
 type ProfileResponse struct {
 	Data  *Profile `json:"data"`
 	Error string   `json:"error"`
@@ -146,6 +181,7 @@ type Searchtask struct {
 	max_len         int
 	asset_id        string
 	ongoing         bool
+	payment_id      uint
 }
 
 type Searchprogress struct {
@@ -171,6 +207,9 @@ const (
 	XIN_ASSET_ID  = "c94ac88f-4671-3976-b60a-09064f1811e8"
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
+
+	ADMIN_UUID    = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
+	PREDEFINE_PIN = "198435"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -239,7 +278,7 @@ func read_bot_created_time(user_id string, session_id string, private_key string
 func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress) {
 	req_task.last_t = req_task.start_t
 	for {
-		snaps, err := mixin.NetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
+		snaps, err := mixin.MyNetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
 		if err != nil {
 			progress_chan <- Searchprogress{
 				Error: err,
@@ -320,6 +359,20 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	}
 }
 
+func search_income_for_payment(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, created_at time.Time, payment_id uint) {
+	for _, v := range default_asset_id_group {
+		req_task := Searchtask{
+			start_t:         created_at,
+			end_t:           created_at.Add(time.Hour * 4),
+			max_len:         500,
+			yesterday2today: true,
+			asset_id:        v,
+			payment_id:      payment_id,
+		}
+		log.Println("fire read snap for asset id", v)
+		go read_my_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+	}
+}
 func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
 	log.Println("Total ", len(searchtasks_array_indb), " search task")
 	if len(searchtasks_array_indb) > 0 {
@@ -333,6 +386,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					yesterday2today: v.Yesterday2today,
 					asset_id:        v.Assetid,
 					ongoing:         v.Ongoing,
+					payment_id:      v.Paymentid,
 				}
 				go read_my_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
 			}
@@ -364,6 +418,7 @@ func main() {
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
+	var payment_received_asset_chan = make(chan ClientReq, 100)
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
 
@@ -404,11 +459,13 @@ func main() {
 				log.Println(pv.Error)
 				continue
 			}
+			log.Println(pv)
 			searchtaskindb := Searchtaskindb{}
 			query_task := Searchtaskindb{
 				Starttime: pv.search_task.start_t,
 				Endtime:   pv.search_task.end_t,
 				Assetid:   pv.search_task.asset_id,
+				Paymentid: pv.search_task.payment_id,
 			}
 			db.Where(&query_task).First(&searchtaskindb)
 			if searchtaskindb.CreatedAt.IsZero() {
@@ -425,6 +482,12 @@ func main() {
 				searchtaskindb.Lasttime = pv.search_task.last_t
 				searchtaskindb.Ongoing = pv.search_task.ongoing
 				db.Save(&searchtaskindb)
+				if pv.search_task.payment_id != 0 {
+					if pv.search_task.last_t.After(pv.search_task.end_t) {
+						searchtaskindb.Ongoing = false
+						db.Save(&searchtaskindb)
+					}
+				}
 			}
 		case v := <-my_snapshot_chan:
 			snapInDb := Snapshotindb{
@@ -444,7 +507,39 @@ func main() {
 					Data:          v.Data,
 				}
 				db.Create(&thisrecord)
+				var matched_account MixinAccountindb
+				db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
+				if matched_account.ID != 0 {
+					if matched_account.ClientReqid != 0 {
+						var matched_req ClientReq
+						db.First(&matched_req, matched_account.ClientReqid)
+						payment_received_asset_chan <- matched_req
+						this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
+						trans_result, trans_err := this_user.Transfer(ADMIN_UUID, thisrecord.Amount, thisrecord.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
+						if trans_err != nil {
+							log.Println(trans_err)
+						} else {
+							var resp TransferNetRespone
+							err = json.Unmarshal(trans_result, &resp)
+
+							if err != nil {
+								log.Println(err)
+							} else {
+								if resp.TransferRes.Error != "" {
+									log.Println(resp.TransferRes.Error)
+								} else {
+									log.Println(resp.TransferRes.Data.Snapshotid)
+								}
+							}
+
+						}
+					}
+				}
 			}
+		case v := <-payment_received_asset_chan:
+			var account MixinAccountindb
+			db.Find(&account, v.MixinAccountid)
+			log.Println("The request id ", v.ID, " receive payment ", v.Callbackurl, " in mixin account record id", v.MixinAccountid, " uuid ", account.Userid)
 		case <-quit_chan:
 			log.Println("finished")
 			return
@@ -562,12 +657,12 @@ func main() {
 									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
 								}
 							}
+							search_income_for_payment(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, time.Now(), new_req.ID)
 						} else {
 							//no avaible mixin account, create more by send channel
 							should_create_more_account_c <- 1
 							//create one in blocking mode
-							const predefine_pin string = "123456"
-							user, err := mixin.CreateAppUser("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key)
+							user, err := mixin.CreateAppUser("tom", PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key)
 							if err != nil {
 								log.Println(err)
 							} else {
@@ -576,7 +671,7 @@ func main() {
 									Sessionid:   user.SessionId,
 									Pintoken:    user.PinToken,
 									Privatekey:  user.PrivateKey,
-									Pin:         predefine_pin,
+									Pin:         PREDEFINE_PIN,
 									ClientReqid: 0,
 								}
 								db.Create(&new_user)
@@ -596,8 +691,10 @@ func main() {
 									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, account_deposit_address_receive_chan)
 								}
 								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
+								search_income_for_payment(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, time.Now(), new_req.ID)
 							}
 						}
+
 					}
 				case "listreqs":
 					var allreqs []ClientReq
@@ -647,6 +744,56 @@ func main() {
 								result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", add.Assetid, add.Accountname, add.Accounttag)
 							}
 						}
+					}
+				case "allmoneygomyhome":
+					var allaccount []MixinAccountindb
+					db.Find(&allaccount)
+					for _, v := range allaccount {
+						log.Println(v.ID, v.Userid)
+						this_user := mixin.NewUser(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken)
+						balance, err := this_user.ReadAssets()
+						if err != nil {
+							log.Println(err)
+							continue
+						} else {
+							var resp BalanceResponse
+							err = json.Unmarshal(balance, &resp)
+							if err != nil {
+								log.Println(err)
+								continue
+							}
+							if resp.Error != "" {
+								log.Println(resp.Error)
+								continue
+							}
+							for _, v := range resp.Data {
+								log.Println(v.Assetid, v.Balance)
+								if v.Balance == "0" {
+									continue
+								} else {
+									trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Balance, v.Assetid, "allmoneygomyhome", uuid.Must(uuid.NewV4()).String())
+									if trans_err != nil {
+										log.Println(trans_err)
+									} else {
+										var resp TransferNetRespone
+										err = json.Unmarshal(trans_result, &resp)
+
+										if err != nil {
+											log.Println(err)
+										} else {
+											if resp.TransferRes.Error != "" {
+												log.Println(resp.TransferRes.Error)
+											} else {
+												log.Println(resp.TransferRes.Data.Snapshotid)
+											}
+										}
+
+									}
+
+								}
+							}
+						}
+
 					}
 				case "lastsnap":
 					var lastsnap Snapshotindb
