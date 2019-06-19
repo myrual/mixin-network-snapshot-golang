@@ -449,7 +449,6 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		}
 		if len_of_snap == 0 {
 			req_task.start_t = time.Now()
-			log.Println("less data than expected found search_userincome ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
 			p := Searchprogress{
 				search_task: req_task,
 			}
