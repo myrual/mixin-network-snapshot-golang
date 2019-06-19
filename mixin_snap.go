@@ -301,9 +301,8 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		}
 		var snaps []byte
 		var err error
-		if req_task.includesubaccount {
-			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, true, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
-		}
+
+		snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, true, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 
 		if err != nil {
 			in_progress_c <- Searchprogress{
@@ -333,7 +332,6 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 			}
 		}
 		if len_of_snap == 0 {
-			log.Println("Nothing found ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
 			p := Searchprogress{
 				search_task: req_task,
 			}
@@ -351,7 +349,6 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 			p.search_task.ongoing = true
 			in_progress_c <- p
 			if len_of_snap < req_task.max_len {
-				log.Println(len_of_snap, "is less than 500 ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
 				time.Sleep(30 * time.Second)
 			}
 		}
