@@ -284,18 +284,14 @@ func read_bot_created_time(user_id string, session_id string, private_key string
 	return resp.Data.CreatedAt
 }
 
-func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c chan Searchprogress) {
+func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_progress_c chan Searchprogress) {
 	for {
 		var snaps []byte
 		var err error
 		if req_task.includesubaccount {
 			log.Println("req_task.includesubaccount:", req_task.includesubaccount, "userid:", req_task.userid, "sessionid:", req_task.sessionid, "privatekey:", req_task.privatekey)
 
-			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
-		} else {
-			log.Println("req_task.includesubaccount:", req_task.includesubaccount, "userid:", req_task.userid, "sessionid:", req_task.sessionid, "privatekey:", req_task.privatekey)
-
-			snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, true, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 		}
 
 		if err != nil {
@@ -321,10 +317,7 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 		len_of_snap := len(resp.Data)
 		for _, v := range resp.Data {
 			log.Println(v.SnapshotId, v.Type, v.CreatedAt)
-			if req_task.includesubaccount == false {
-				v.UserId = req_task.userid
-				result_chan <- v
-			} else if v.UserId != "" {
+			if v.UserId != "" {
 				result_chan <- v
 			}
 		}
@@ -490,7 +483,7 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 	}
 	go read_mysnap(req_task, my_snapshot_chan, in_progress_c)
 }
-func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
+func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
 	if len(searchtasks_array_indb) > 0 {
 		for _, v := range searchtasks_array_indb {
 			if v.Ongoing == true {
@@ -507,7 +500,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					privatekey:        v.Privatekey,
 					includesubaccount: v.Includesubaccount,
 				}
-				go read_snap(unfinished_req_task, my_snapshot_chan, in_progress_c)
+				go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
 			}
 		}
 	} else {
@@ -527,7 +520,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					privatekey:        user_config.private_key,
 					includesubaccount: true,
 				}
-				go read_snap(search_asset_task, my_snapshot_chan, in_progress_c)
+				go read_snap_to_future(search_asset_task, in_result_chan, in_progress_c)
 			}
 			all_asset_task := Searchtask{
 				start_t:           time.Now(),
@@ -539,7 +532,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 				privatekey:        user_config.private_key,
 				includesubaccount: true,
 			}
-			go read_snap(all_asset_task, my_snapshot_chan, in_progress_c)
+			go read_snap_to_future(all_asset_task, in_result_chan, in_progress_c)
 		}
 	}
 }
