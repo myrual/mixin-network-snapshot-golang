@@ -1,19 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
-	"fmt"
+	"io"
 	"log"
-	"os"
+	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
-	"github.com/satori/go.uuid"
 )
 
 const (
@@ -110,6 +107,7 @@ type DepositAddressindb struct {
 
 type ClientReq struct {
 	gorm.Model
+	Reqid          string
 	Callbackurl    string
 	MixinAccountid uint
 	Callbackfired  bool
@@ -198,6 +196,30 @@ type Searchtask struct {
 type Searchprogress struct {
 	search_task Searchtask
 	Error       error
+}
+
+type PaymentReqhttp struct {
+	Reqid    string `json:"reqid"`
+	Callback string `json:"callback"`
+}
+
+type PaymentReq struct {
+	Method   string
+	Reqid    string
+	Callback string
+	Res_c    chan PaymentRes
+}
+type PaymentMethod struct {
+	Name        string
+	PublicKey   string
+	AccountName string
+	AccountTag  string
+}
+type PaymentRes struct {
+	Reqid           string
+	Payment_methods []PaymentMethod
+	Payment_records []Snapshotindb
+	Balance         []Asset
 }
 
 const (
@@ -354,20 +376,66 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		}
 	}
 }
-
-func user_interact(cmd_c chan string, output_c chan string) {
-	scanner := bufio.NewScanner(os.Stdin)
-	var cmd string
-
-	for {
-		select {
-		case v := <-output_c:
-			log.Println(v)
+func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			log.Println(r.URL.Query())
+			keys, ok := r.URL.Query()["reqid"]
+			log.Println(keys)
+			if ok != true || len(keys[0]) < 1 {
+				io.WriteString(w, "Missing parameter reqid!\n")
+				return
+			}
+			payment_res_c := make(chan PaymentRes, 1)
+			req := PaymentReq{
+				Method: "GET",
+				Reqid:  keys[0],
+				Res_c:  payment_res_c,
+			}
+			input <- req
+			v := <-payment_res_c
+			b, jserr := json.Marshal(v)
+			if jserr != nil {
+				log.Println(jserr)
+			} else {
+				w.Write(b)
+			}
+		case "POST":
+			d := json.NewDecoder(r.Body)
+			var p PaymentReqhttp
+			errjs := d.Decode(&p)
+			if errjs != nil {
+				http.Error(w, errjs.Error(), http.StatusInternalServerError)
+			}
+			payment_res_c := make(chan PaymentRes, 1)
+			req := PaymentReq{
+				Reqid:    p.Reqid,
+				Callback: p.Callback,
+				Res_c:    payment_res_c,
+			}
+			input <- req
+			v := <-payment_res_c
+			b, jserr := json.Marshal(v)
+			if jserr != nil {
+				log.Println(jserr)
+			} else {
+				w.Write(b)
+			}
+		default:
+			io.WriteString(w, "Wrong!\n")
 		}
-		scanner.Scan()
-		cmd = scanner.Text()
-		cmd_c <- cmd
 	}
+}
+func paymentHandle(w http.ResponseWriter, req *http.Request) {
+
+}
+
+func user_interact(cmd_c chan PaymentReq, output_c chan string) {
+
+	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
+	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("after web")
 }
 
 func create_mixin_account(account_name string, predefine_pin string, user_id string, session_id string, private_key string, result_chan chan MixinAccountindb) {
@@ -527,7 +595,7 @@ func main() {
 	var asset_received_snap_chan = make(chan *Snapshot, 1000)
 	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
-	var user_cmd_chan = make(chan string, 10)
+	var req_cmd_chan = make(chan PaymentReq, 2)
 	var user_output_chan = make(chan string, 100)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
 	var payment_received_asset_chan = make(chan ClientReq, 100)
@@ -561,7 +629,7 @@ func main() {
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
 	user_output_chan <- promot
-	go user_interact(user_cmd_chan, user_output_chan)
+	go user_interact(req_cmd_chan, user_output_chan)
 
 	should_create_more_account_c <- 1
 	for {
@@ -698,257 +766,88 @@ func main() {
 				}
 			}
 
-		case v := <-user_cmd_chan:
-			result := "\n"
-			switch v {
-			case "allsnap":
-				var allsnap []Snapshotindb
-				db.Find(&allsnap)
-				for _, v := range allsnap {
-					result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
-				}
-			case "status":
-				var alltask []Searchtaskindb
-				db.Find(&alltask)
-				total_ongoing := 0
-				total_finished := 0
-				for _, v := range alltask {
-					if v.Ongoing {
-						total_ongoing += 1
-						result += fmt.Sprintf("%v search %v at %v  to %v include subaccount %v\n", v.Userid, v.Assetid, v.Starttime, v.Endtime, v.Includesubaccount)
-					} else {
-						total_finished += 1
-					}
-				}
-				result += fmt.Sprintf("total %v ongoing", total_ongoing)
-				result += fmt.Sprintf("total %v finished", total_finished)
-			case "quit":
-				quit_chan <- 1
-			default:
-				splited_string := strings.Split(v, " ")
-				switch splited_string[0] {
-				case "searchuser":
-					user := splited_string[1]
-					var users_snap []Snapshotindb
-					var user_indb MixinAccountindb
-					db.Where(&MixinAccountindb{Userid: user}).First(&user_indb)
-					log.Println("hello", user_indb.ID, user_indb.Userid, user_indb.CreatedAt)
-					db.Where(&Snapshotindb{UserId: user}).Find(&users_snap)
-					for _, v := range users_snap {
-						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
-					}
-				case "searchusersnap":
-					user := splited_string[1]
-					var mixin_acount MixinAccountindb
-					db.Where(&MixinAccountindb{Userid: user}).Find(&mixin_acount)
-					if mixin_acount.ID == 0 {
-						log.Println("no user record")
-					} else {
-						go search_userincome("", mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, mixin_acount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
-					}
-				case "createpayment":
-					if len(splited_string) > 1 {
-						unique_id := splited_string[1]
-						var free_mixinaccount MixinAccountindb
-						db.Where("client_reqid = ?", "0").First(&free_mixinaccount)
-						if free_mixinaccount.ID != 0 {
-							new_req := ClientReq{
-								Callbackurl:    unique_id,
-								MixinAccountid: free_mixinaccount.ID,
-							}
-							db.Create(&new_req)
-							free_mixinaccount.ClientReqid = new_req.ID
-							db.Save(&free_mixinaccount)
-							go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
-							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", free_mixinaccount.ID, free_mixinaccount.Userid, new_req.ID)
-							var payment_addresses []DepositAddressindb
-							db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
-							for _, v := range payment_addresses {
-								if v.Publicaddress != "" {
-									result += fmt.Sprintf("Asset : %v Payment address %v\n", v.Assetid, v.Publicaddress)
-								} else {
-									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
-								}
-							}
-
-						} else {
-							//no avaible mixin account, create more by send channel
-							should_create_more_account_c <- 1
-							//create one in blocking mode
-							user, err := mixin.CreateAppUser(PREDEFINE_NAME, PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key)
-							if err != nil {
-								log.Println(err)
-							} else {
-								new_user := MixinAccountindb{
-									Userid:      user.UserId,
-									Sessionid:   user.SessionId,
-									Pintoken:    user.PinToken,
-									Privatekey:  user.PrivateKey,
-									Pin:         PREDEFINE_PIN,
-									ClientReqid: 0,
-								}
-								db.Create(&new_user)
-								new_req := ClientReq{
-									Callbackurl:    unique_id,
-									MixinAccountid: new_user.ID,
-								}
-								db.Create(&new_req)
-								new_user.ClientReqid = new_req.ID
-								db.Save(&new_user)
-								for _, v := range default_asset_id_group {
-									depositRecord := DepositAddressindb{
-										Accountrecord_id: new_user.ID,
-										Assetid:          v,
-									}
-									db.Create(&depositRecord)
-									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, account_deposit_address_receive_chan)
-								}
-								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-								start_t := new_user.Utccreated_at
-								end_t := start_t.Add(time.Hour * 4)
-								go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t, time.Now().Add(time.Hour*4))
-							}
-						}
-
-					}
-				case "listreqs":
-					var allreqs []ClientReq
-					db.Find(&allreqs)
-					for _, v := range allreqs {
-						result += fmt.Sprintf("req id: %v %v %v\n", v.ID, v.Callbackurl, v.MixinAccountid)
-					}
-				case "searchreq":
-					payment_id := splited_string[1]
-					var req ClientReq
-					db.Where(&ClientReq{Callbackurl: payment_id}).Find(&req)
-					if req.ID != 0 {
-						var mixin_account MixinAccountindb
-						db.Find(&mixin_account, req.MixinAccountid)
-						if mixin_account.ID != 0 {
-							result += fmt.Sprintf("Record found : %v\nuser id %v\n", req.Callbackurl, mixin_account.Userid)
-							var payment_addresses []DepositAddressindb
-							db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID}).Find(&payment_addresses)
-							for _, v := range payment_addresses {
-								if v.Publicaddress != "" {
-									result += fmt.Sprintf("Asset : %v Payment address %v\n", v.Assetid, v.Publicaddress)
-								} else {
-									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
-								}
-							}
-							result += "\n all snapshot:\n"
-							var users_snap []Snapshotindb
-							db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&users_snap)
-							for _, v := range users_snap {
-								result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
-							}
-							result += "\n balance:\n"
-							this_user := mixin.NewUser(mixin_account.Userid, mixin_account.Sessionid, mixin_account.Privatekey, mixin_account.Pin, mixin_account.Pintoken)
-							balance, err := this_user.ReadAssets()
-							if err != nil {
-								log.Println(err)
-								continue
-							} else {
-								var resp BalanceResponse
-								err = json.Unmarshal(balance, &resp)
-								if err != nil {
-									log.Println(err)
-									continue
-								}
-								if resp.Error != "" {
-									log.Println(resp.Error)
-									continue
-								}
-								for _, v := range resp.Data {
-									result += fmt.Sprintf("asset id: %v, %v\n", v.Assetid, v.Balance)
-								}
-							}
-
-						} else {
-							result += fmt.Sprintf("Record found, but no payment channel is missing")
-						}
-						user_output_chan <- result
-					} else {
-						result += fmt.Sprintf("No matched record")
-					}
-				case "createuser":
-					go create_mixin_account("tom", PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
-				case "listusers":
-					var allaccount []MixinAccountindb
-					db.Find(&allaccount)
-					for _, v := range allaccount {
-						result += fmt.Sprintf("user id: %v %v %v\n", v.ID, v.Userid, v.ClientReqid)
+		case v := <-req_cmd_chan:
+			if v.Method == "GET" {
+				log.Println("GET", v.Reqid)
+				payment_id := v.Reqid
+				var req ClientReq
+				var res PaymentRes
+				response_c := v.Res_c
+				db.Where(&ClientReq{Reqid: payment_id}).Find(&req)
+				if req.ID != 0 {
+					log.Println("GET req record with ", v.Reqid)
+					res.Reqid = v.Reqid
+					var mixin_account MixinAccountindb
+					db.Find(&mixin_account, req.MixinAccountid)
+					if mixin_account.ID != 0 {
 						var payment_addresses []DepositAddressindb
-						db.Where(&DepositAddressindb{Accountrecord_id: v.ID}).Find(&payment_addresses)
-						for _, add := range payment_addresses {
-							if add.Publicaddress != "" {
-								result += fmt.Sprintf("Asset : %v Payment address %v\n", add.Assetid, add.Publicaddress)
-							} else {
-								result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", add.Assetid, add.Accountname, add.Accounttag)
+						db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID}).Find(&payment_addresses)
+						var all_method []PaymentMethod
+						for _, v := range payment_addresses {
+							var pv PaymentMethod
+							switch v.Assetid {
+							case EOS_ASSET_ID:
+								pv.Name = "EOS"
+							case XLM_ASSET_ID:
+								pv.Name = "XLM"
 							}
-						}
-					}
-				case "allmoneygomyhome":
-					var allaccount []MixinAccountindb
-					db.Find(&allaccount)
-					for _, v := range allaccount {
-						log.Println(v.ID, v.Userid)
-						this_user := mixin.NewUser(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken)
-						balance, err := this_user.ReadAssets()
-						if err != nil {
-							log.Println(err)
-							continue
-						} else {
-							var resp BalanceResponse
-							err = json.Unmarshal(balance, &resp)
-							if err != nil {
-								log.Println(err)
-								continue
-							}
-							if resp.Error != "" {
-								log.Println(resp.Error)
-								continue
-							}
-							for _, v := range resp.Data {
-								log.Println(this_user.UserId, v.Assetid, v.Balance)
-								if v.Balance == "0" {
-									continue
-								} else {
-									trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Balance, v.Assetid, "allmoneygomyhome", uuid.Must(uuid.NewV4()).String())
-									if trans_err != nil {
-										log.Println(trans_err)
-									} else {
-										var resp TransferNetRespone
-										err = json.Unmarshal(trans_result, &resp)
+							pv.PublicKey = v.Publicaddress
+							pv.AccountName = v.Accountname
+							pv.AccountTag = v.Accounttag
 
-										if err != nil {
-											log.Println(err)
-										} else {
-											if resp.TransferRes.Error != "" {
-												log.Println(resp.TransferRes.Error)
-											} else {
-												log.Println(resp.TransferRes.Data.Snapshotid)
-											}
-										}
-
-									}
-
-								}
-							}
+							all_method = append(all_method, pv)
 						}
 
+						res.Payment_methods = all_method
+						response_c <- res
+					} else {
+						response_c <- res
 					}
-				case "lastsnap":
-					var lastsnap Snapshotindb
-					db.Last(&lastsnap)
-					result += fmt.Sprintf("at %v %v %v", lastsnap.CreatedAt, lastsnap.Amount, lastsnap.AssetId)
-
+				} else {
+					response_c <- res
 				}
+			} else {
+				log.Println("POST", v.Reqid, v.Callback)
+				unique_id := v.Reqid
+				response_c := v.Res_c
+				var res PaymentRes
+				var free_mixinaccount MixinAccountindb
+				db.Where("client_reqid = ?", "0").First(&free_mixinaccount)
+				if free_mixinaccount.ID != 0 {
+					res.Reqid = v.Reqid
+					new_req := ClientReq{
+						Reqid:          unique_id,
+						Callbackurl:    v.Callback,
+						MixinAccountid: free_mixinaccount.ID,
+					}
+					db.Create(&new_req)
+					free_mixinaccount.ClientReqid = new_req.ID
+					db.Save(&free_mixinaccount)
+					log.Println("POST", new_req.Reqid, new_req.Callbackurl, free_mixinaccount.Userid)
+					go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
+					var payment_addresses []DepositAddressindb
+					db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
+					var all_method []PaymentMethod
+					for _, v := range payment_addresses {
+						var pv PaymentMethod
+						switch v.Assetid {
+						case EOS_ASSET_ID:
+							pv.Name = "EOS"
+						case XLM_ASSET_ID:
+							pv.Name = "XLM"
+						}
+						pv.PublicKey = v.Publicaddress
+						pv.AccountName = v.Accountname
+						pv.AccountTag = v.Accounttag
 
+						all_method = append(all_method, pv)
+					}
+					res.Payment_methods = all_method
+				} else {
+					log.Println("no new user account")
+				}
+				response_c <- res
 			}
-			result += "allsnap: read all snap\n"
-			result += "status: ongoing search task\n"
-			result += "your selection:"
-			user_output_chan <- result
 		}
 	}
 }
