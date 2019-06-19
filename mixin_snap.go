@@ -500,7 +500,14 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					privatekey:        v.Privatekey,
 					includesubaccount: v.Includesubaccount,
 				}
+				if v.Includesubaccount == false {
+					go read_mysnap(unfinished_req_task, in_result_chan, in_progress_c)
+				} else {
+					if v.Yesterday2today {
 				go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
+			}
+		}
+
 			}
 		}
 	} else {
@@ -522,17 +529,6 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 				}
 				go read_snap_to_future(search_asset_task, in_result_chan, in_progress_c)
 			}
-			all_asset_task := Searchtask{
-				start_t:           time.Now(),
-				max_len:           500,
-				yesterday2today:   false,
-				asset_id:          "",
-				userid:            user_config.user_id,
-				sessionid:         user_config.session_id,
-				privatekey:        user_config.private_key,
-				includesubaccount: true,
-			}
-			go read_snap_to_future(all_asset_task, in_result_chan, in_progress_c)
 		}
 	}
 }
@@ -570,7 +566,7 @@ func main() {
 	}
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
-	//restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
+	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
 	promot := "allsnap: read all snap\n"
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
@@ -615,7 +611,6 @@ func main() {
 			snapInDb := Snapshotindb{
 				SnapshotId: v.SnapshotId,
 			}
-			log.Println(v.CreatedAt, v.SnapshotId, v.Asset, v.Amount, v.UserId)
 			db.First(&snapInDb, "snapshot_id = ?", v.SnapshotId)
 			if snapInDb.CreatedAt.IsZero() {
 				var thisrecord = Snapshotindb{
