@@ -748,7 +748,7 @@ func main() {
 					if mixin_acount.ID == 0 {
 						log.Println("no user record")
 					} else {
-						go search_userincome(XLM_ASSET_ID, mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, mixin_acount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
+						go search_userincome("", mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, mixin_acount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
 					}
 				case "createpayment":
 					if len(splited_string) > 1 {
