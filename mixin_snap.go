@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,17 +37,19 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 )
 
 type Snapshot struct {
-	SnapshotId string `json:"snapshot_id"`
-	Amount     string `json:"amount"`
-	Asset      struct {
+	Amount string `json:"amount"`
+	Asset  struct {
 		AssetId string `json:"asset_id"`
 	} `json:"asset"`
-	Source     string    `json:"source"`
 	CreatedAt  time.Time `json:"created_at"`
-	TraceId    string    `json:"trace_id"`
-	UserId     string    `json:"user_id"`
-	OpponentId string    `json:"opponent_id"`
-	Data       string    `json:"data"`
+	SnapshotId string    `json:"snapshot_id"`
+	Source     string    `json:"source"`
+	Type       string    `json:"type"`
+	//only available when http request include correct token
+	UserId     string `json:"user_id"`
+	TraceId    string `json:"trace_id"`
+	OpponentId string `json:"opponent_id"`
+	Data       string `json:"data"`
 }
 type Profile struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -80,16 +83,18 @@ type Snapshotindb struct {
 	TraceId       string
 	OpponentId    string
 	Data          string
+	OPType        string
 }
 
 type MixinAccountindb struct {
 	gorm.Model
-	Userid      string `gorm:"primary_key"`
-	Sessionid   string
-	Pintoken    string
-	Privatekey  string
-	Pin         string
-	ClientReqid uint
+	Userid        string `gorm:"primary_key"`
+	Sessionid     string
+	Pintoken      string
+	Privatekey    string
+	Pin           string
+	ClientReqid   uint
+	Utccreated_at time.Time
 }
 
 type DepositAddressindb struct {
@@ -112,13 +117,15 @@ type ClientReq struct {
 
 type Searchtaskindb struct {
 	gorm.Model
-	Starttime       time.Time
-	Endtime         time.Time
-	Lasttime        time.Time
-	Yesterday2today bool
-	Assetid         string
-	Ongoing         bool
-	Paymentid       uint
+	Starttime         time.Time
+	Endtime           time.Time
+	Yesterday2today   bool
+	Assetid           string
+	Ongoing           bool
+	Userid            string
+	Sessionid         string
+	Privatekey        string
+	Includesubaccount bool
 }
 
 type BotConfig struct {
@@ -142,8 +149,8 @@ type TransferNetRespone struct {
 	Error       error
 }
 type TransferResponse struct {
-	Data  *Transfer `json:"data"`
-	Error string    `json:"error"`
+	Data  Transfer `json:"data"`
+	Error string   `json:"error"`
 }
 type Transfer struct {
 	Optype         string `json:"type"`
@@ -174,14 +181,16 @@ type ProfileResponse struct {
 	Error string   `json:"error"`
 }
 type Searchtask struct {
-	start_t         time.Time
-	end_t           time.Time
-	last_t          time.Time
-	yesterday2today bool
-	max_len         int
-	asset_id        string
-	ongoing         bool
-	payment_id      uint
+	start_t           time.Time
+	end_t             time.Time
+	yesterday2today   bool
+	max_len           int
+	asset_id          string
+	ongoing           bool
+	userid            string
+	sessionid         string
+	privatekey        string
+	includesubaccount bool
 }
 
 type Searchprogress struct {
@@ -275,12 +284,21 @@ func read_bot_created_time(user_id string, session_id string, private_key string
 	return resp.Data.CreatedAt
 }
 
-func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress) {
-	req_task.last_t = req_task.start_t
+func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c chan Searchprogress) {
 	for {
-		snaps, err := mixin.MyNetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
+		var snaps []byte
+		var err error
+		if req_task.includesubaccount {
+			log.Println("whole network")
+			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+		} else {
+
+			log.Println(req_task.userid, req_task.sessionid, req_task.privatekey, "my network")
+			snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+		}
+
 		if err != nil {
-			progress_chan <- Searchprogress{
+			in_progress_c <- Searchprogress{
 				Error: err,
 			}
 			continue
@@ -290,93 +308,76 @@ func read_my_snap(req_task Searchtask, user_config BotConfig, result_chan chan *
 		err = json.Unmarshal(snaps, &resp)
 
 		if err != nil {
-			progress_chan <- Searchprogress{
+			in_progress_c <- Searchprogress{
 				Error: err,
 			}
 			continue
 		}
 		if resp.Error != "" {
-			log.Println("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+			log.Fatal("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
 			return
-		}
-		for _, v := range resp.Data {
-			if v.UserId != "" {
-				result_chan <- v
-			}
 		}
 		len_of_snap := len(resp.Data)
-		if len_of_snap == 0 {
-			log.Println("No ", req_task.asset_id, "After ", req_task.last_t)
-			time.Sleep(60 * time.Second)
-			continue
-		}
-		last_element := resp.Data[len(resp.Data)-1]
-		req_task.last_t = last_element.CreatedAt
-		p := Searchprogress{
-			search_task: req_task,
-		}
-		if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
-			p.search_task.ongoing = false
-			progress_chan <- p
-			return
-		}
-		p.search_task.ongoing = true
-		progress_chan <- p
-		if len_of_snap < req_task.max_len {
-			time.Sleep(60 * time.Second)
-		}
-	}
-}
-
-func read_snap(req_task Searchtask, user_config BotConfig, result_chan chan *Snapshot, progress_chan chan Searchprogress) {
-	req_task.last_t = req_task.start_t
-	for {
-		snaps, err := mixin.NetworkSnapshots(req_task.asset_id, req_task.last_t, req_task.yesterday2today, req_task.max_len, user_config.user_id, user_config.session_id, user_config.private_key)
-		if err != nil {
-			progress_chan <- Searchprogress{
-				Error: err,
-			}
-			continue
-		}
-
-		var resp MixinResponse
-		err = json.Unmarshal(snaps, &resp)
-
-		if err != nil {
-			progress_chan <- Searchprogress{
-				Error: err,
-			}
-			continue
-		}
-		if resp.Error != "" {
-			log.Println("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
-			return
-		}
+		log.Println("len of data  before push to chan", len_of_snap)
 		for _, v := range resp.Data {
-			if v.UserId != "" {
+			if req_task.includesubaccount == false {
+				//all result is abou me
+				log.Println(v.CreatedAt, v.SnapshotId, v.Asset.AssetId, v.Amount, v.OpponentId, v.TraceId, v.Source, v.UserId)
 				result_chan <- v
+			} else if v.UserId != "" {
+				result_chan <- v
+			} else {
+				log.Println("found one snapshot without user id", v.SnapshotId)
 			}
 		}
-		len_of_snap := len(resp.Data)
+		len_of_snapafter := len(resp.Data)
+		log.Println("len of data  after push to chan", len_of_snapafter)
 		if len_of_snap == 0 {
-			log.Println("No ", req_task.asset_id, "After ", req_task.last_t)
-			time.Sleep(60 * time.Second)
-			continue
-		}
-		last_element := resp.Data[len(resp.Data)-1]
-		req_task.last_t = last_element.CreatedAt
-		p := Searchprogress{
-			search_task: req_task,
-		}
-		if last_element.CreatedAt.After(req_task.end_t) && req_task.end_t.IsZero() == false {
-			p.search_task.ongoing = false
-			progress_chan <- p
-			return
-		}
-		p.search_task.ongoing = true
-		progress_chan <- p
-		if len_of_snap < req_task.max_len {
-			time.Sleep(60 * time.Second)
+			log.Println("Nothing found ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
+			if req_task.end_t.IsZero() == false && time.Now().After(req_task.end_t) {
+				//nothing is searched, now is after expected end time, should expired
+				log.Println("No ", req_task.asset_id, "After ", req_task.start_t)
+				p := Searchprogress{
+					search_task: req_task,
+				}
+				p.search_task.ongoing = false
+				in_progress_c <- p
+				return
+			} else {
+				p := Searchprogress{
+					search_task: req_task,
+				}
+				in_progress_c <- p
+				//nothing is searched, wait
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+		} else {
+
+			last_element := resp.Data[len(resp.Data)-1]
+			req_task.start_t = last_element.CreatedAt
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			p.search_task.start_t = last_element.CreatedAt
+
+			if req_task.end_t.IsZero() == false && last_element.CreatedAt.After(req_task.end_t) {
+				p.search_task.ongoing = false
+				in_progress_c <- p
+				return
+			} else {
+				p.search_task.ongoing = true
+				in_progress_c <- p
+				if len_of_snap < req_task.max_len {
+					log.Println(len_of_snap, "is less than 500 ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
+					for _, v := range resp.Data {
+						log.Println(v.CreatedAt, v.SnapshotId, v.Amount, v.Asset, v.UserId)
+					}
+					time.Sleep(30 * time.Second)
+				}
+			}
+
 		}
 	}
 }
@@ -401,49 +402,61 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	if err != nil {
 		log.Println(err)
 	} else {
-		new_user := MixinAccountindb{
-			Userid:      user.UserId,
-			Sessionid:   user.SessionId,
-			Pintoken:    user.PinToken,
-			Privatekey:  user.PrivateKey,
-			Pin:         predefine_pin,
-			ClientReqid: 0,
+		created_time, err := time.Parse(time.RFC3339Nano, user.CreatedAt)
+		if err != nil {
+			log.Println(err)
+		} else {
+			new_user := MixinAccountindb{
+				Userid:        user.UserId,
+				Sessionid:     user.SessionId,
+				Pintoken:      user.PinToken,
+				Privatekey:    user.PrivateKey,
+				Pin:           predefine_pin,
+				ClientReqid:   0,
+				Utccreated_at: created_time,
+			}
+			result_chan <- new_user
 		}
-		result_chan <- new_user
+
 	}
 }
 
-func search_income_for_payment(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, created_at time.Time, payment_id uint) {
-	for _, v := range default_asset_id_group {
-		req_task := Searchtask{
-			start_t:         created_at,
-			end_t:           created_at.Add(time.Hour * 4),
-			max_len:         500,
-			yesterday2today: true,
-			asset_id:        v,
-			payment_id:      payment_id,
-		}
-		log.Println("fire read snap for asset id", v)
-		go read_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+func search_userincome(asset_id string, userid string, sessionid string, privatekey string, my_snapshot_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time) {
+	req_task := Searchtask{
+		start_t:           created_at,
+		end_t:             end_at,
+		max_len:           500,
+		yesterday2today:   true,
+		asset_id:          asset_id,
+		userid:            userid,
+		sessionid:         sessionid,
+		privatekey:        privatekey,
+		ongoing:           true,
+		includesubaccount: false,
 	}
+	log.Println("read all asset for user ", userid, "for asset id ", asset_id)
+	go read_snap(req_task, my_snapshot_chan, in_progress_c)
 }
-func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, progress_chan chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
+func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
 	log.Println("Total ", len(searchtasks_array_indb), " search task")
 	if len(searchtasks_array_indb) > 0 {
 		for _, v := range searchtasks_array_indb {
 			if v.Ongoing == true {
-				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Lasttime)
+				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Userid, v.Assetid)
 				unfinished_req_task := Searchtask{
-					start_t:         v.Starttime,
-					end_t:           v.Endtime,
-					last_t:          v.Lasttime,
-					yesterday2today: v.Yesterday2today,
-					asset_id:        v.Assetid,
-					ongoing:         v.Ongoing,
-					payment_id:      v.Paymentid,
+					start_t:           v.Starttime,
+					end_t:             v.Endtime,
+					max_len:           500,
+					yesterday2today:   v.Yesterday2today,
+					asset_id:          v.Assetid,
+					ongoing:           v.Ongoing,
+					userid:            v.Userid,
+					sessionid:         v.Sessionid,
+					privatekey:        v.Privatekey,
+					includesubaccount: v.Includesubaccount,
 				}
-				log.Printf("asset %v start at %v to %v last at %v", unfinished_req_task.asset_id, unfinished_req_task.start_t, unfinished_req_task.end_t, unfinished_req_task.last_t)
-				go read_snap(unfinished_req_task, user_config, my_snapshot_chan, progress_chan)
+				log.Printf("asset %v start at %v to %v last include subaccount %v", unfinished_req_task.asset_id, unfinished_req_task.start_t, unfinished_req_task.end_t, v.Includesubaccount)
+				go read_snap(unfinished_req_task, my_snapshot_chan, in_progress_c)
 			}
 		}
 	} else {
@@ -453,22 +466,38 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 		} else {
 			log.Println("I am created at ", botCreateAt)
 			for _, v := range default_asset_id_group {
-				req_task := Searchtask{
-					start_t:         botCreateAt,
-					max_len:         500,
-					yesterday2today: true,
-					asset_id:        v,
+				search_asset_task := Searchtask{
+					start_t:           botCreateAt,
+					max_len:           500,
+					yesterday2today:   false,
+					asset_id:          v,
+					userid:            user_config.user_id,
+					sessionid:         user_config.session_id,
+					privatekey:        user_config.private_key,
+					includesubaccount: false,
 				}
-				log.Println("fire read snap for asset id", v)
-				go read_snap(req_task, user_config, my_snapshot_chan, progress_chan)
+				log.Println("fire read snap for asset id", v, " for me and all sub account", user_config.user_id)
+				go read_snap(search_asset_task, my_snapshot_chan, in_progress_c)
 			}
+			all_asset_task := Searchtask{
+				start_t:           time.Now(),
+				max_len:           500,
+				yesterday2today:   false,
+				asset_id:          "",
+				userid:            user_config.user_id,
+				sessionid:         user_config.session_id,
+				privatekey:        user_config.private_key,
+				includesubaccount: false,
+			}
+			log.Println("fire read snap for all asset for me and all sub account", user_config.user_id)
+			go read_snap(all_asset_task, my_snapshot_chan, in_progress_c)
 		}
 	}
 }
 
 func main() {
 	var my_snapshot_chan = make(chan *Snapshot, 1000)
-	var progress_chan = make(chan Searchprogress, 1000)
+	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 	var user_cmd_chan = make(chan string, 10)
 	var user_output_chan = make(chan string, 100)
@@ -499,7 +528,20 @@ func main() {
 	}
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
-	restore_searchsnap(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, ongoing_searchtasks_indb)
+	//restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
+	mysnap, err := mixin.MyNetworkSnapshots("", time.Now(), false, 10, user_config.user_id, user_config.session_id, user_config.private_key)
+	if err != nil {
+	} else {
+		var resp MixinResponse
+		err = json.Unmarshal(mysnap, &resp)
+		if err != nil {
+			log.Println("decoding error")
+		} else {
+			mysnaps := resp.Data
+			firstone := mysnaps[0]
+			log.Println(firstone.SnapshotId, firstone.CreatedAt, firstone.Type)
+		}
+	}
 	promot := "allsnap: read all snap\n"
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
@@ -509,44 +551,42 @@ func main() {
 	should_create_more_account_c <- 1
 	for {
 		select {
-		case pv := <-progress_chan:
+		case pv := <-global_progress_c:
 			if pv.Error != nil {
 				log.Println(pv.Error)
 				continue
 			}
 			searchtaskindb := Searchtaskindb{}
 			query_task := Searchtaskindb{
-				Starttime: pv.search_task.start_t,
-				Endtime:   pv.search_task.end_t,
-				Assetid:   pv.search_task.asset_id,
-				Paymentid: pv.search_task.payment_id,
+				Endtime:           pv.search_task.end_t,
+				Assetid:           pv.search_task.asset_id,
+				Userid:            pv.search_task.userid,
+				Includesubaccount: pv.search_task.includesubaccount,
 			}
 			db.Where(&query_task).First(&searchtaskindb)
 			if searchtaskindb.CreatedAt.IsZero() {
 				var this_record = Searchtaskindb{
-					Starttime:       pv.search_task.start_t,
-					Endtime:         pv.search_task.end_t,
-					Lasttime:        pv.search_task.last_t,
-					Yesterday2today: pv.search_task.yesterday2today,
-					Assetid:         pv.search_task.asset_id,
-					Ongoing:         pv.search_task.ongoing,
+					Starttime:         pv.search_task.start_t,
+					Endtime:           pv.search_task.end_t,
+					Yesterday2today:   pv.search_task.yesterday2today,
+					Assetid:           pv.search_task.asset_id,
+					Ongoing:           pv.search_task.ongoing,
+					Userid:            pv.search_task.userid,
+					Sessionid:         pv.search_task.sessionid,
+					Privatekey:        pv.search_task.privatekey,
+					Includesubaccount: pv.search_task.includesubaccount,
 				}
 				db.Create(&this_record)
 			} else {
-				searchtaskindb.Lasttime = pv.search_task.last_t
+				searchtaskindb.Starttime = pv.search_task.start_t
 				searchtaskindb.Ongoing = pv.search_task.ongoing
 				db.Save(&searchtaskindb)
-				if pv.search_task.payment_id != 0 {
-					if pv.search_task.last_t.After(pv.search_task.end_t) {
-						searchtaskindb.Ongoing = false
-						db.Save(&searchtaskindb)
-					}
-				}
 			}
 		case v := <-my_snapshot_chan:
 			snapInDb := Snapshotindb{
 				SnapshotId: v.SnapshotId,
 			}
+			log.Println(v.CreatedAt, v.SnapshotId, v.Asset, v.Amount)
 			db.First(&snapInDb, "snapshot_id = ?", v.SnapshotId)
 			if snapInDb.CreatedAt.IsZero() {
 				var thisrecord = Snapshotindb{
@@ -559,36 +599,41 @@ func main() {
 					TraceId:       v.TraceId,
 					OpponentId:    v.OpponentId,
 					Data:          v.Data,
+					OPType:        v.Type,
 				}
 				db.Create(&thisrecord)
-				var matched_account MixinAccountindb
-				db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
-				if matched_account.ID != 0 {
-					if matched_account.ClientReqid != 0 {
-						var matched_req ClientReq
-						db.First(&matched_req, matched_account.ClientReqid)
-						payment_received_asset_chan <- matched_req
-						this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
-						trans_result, trans_err := this_user.Transfer(ADMIN_UUID, thisrecord.Amount, thisrecord.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
-						if trans_err != nil {
-							log.Println(trans_err)
-						} else {
-							var resp TransferNetRespone
-							err = json.Unmarshal(trans_result, &resp)
-
-							if err != nil {
-								log.Println(err)
+				f, err := strconv.ParseFloat(v.Amount, 64)
+				if f > 0 {
+					var matched_account MixinAccountindb
+					db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
+					if matched_account.ID != 0 {
+						if matched_account.ClientReqid != 0 {
+							var matched_req ClientReq
+							db.First(&matched_req, matched_account.ClientReqid)
+							payment_received_asset_chan <- matched_req
+							this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
+							trans_result, trans_err := this_user.Transfer(ADMIN_UUID, thisrecord.Amount, thisrecord.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
+							if trans_err != nil {
+								log.Println(trans_err)
 							} else {
-								if resp.TransferRes.Error != "" {
-									log.Println(resp.TransferRes.Error)
-								} else {
-									log.Println(resp.TransferRes.Data.Snapshotid)
-								}
-							}
+								var resp TransferNetRespone
+								err = json.Unmarshal(trans_result, &resp)
 
+								if err != nil {
+									log.Println(err)
+								} else {
+									if resp.TransferRes.Error != "" {
+										log.Println(resp.TransferRes.Error)
+									} else {
+										log.Println(resp.TransferRes.Data.Snapshotid)
+									}
+								}
+
+							}
 						}
 					}
 				}
+
 			}
 		case v := <-payment_received_asset_chan:
 			var account MixinAccountindb
@@ -669,7 +714,7 @@ func main() {
 				for _, v := range alltask {
 					if v.Ongoing {
 						total_ongoing += 1
-						result += fmt.Sprintf("search %v at %v from:%v to %v\n", v.Assetid, v.Lasttime, v.Starttime, v.Endtime)
+						result += fmt.Sprintf("%v search %v at %v  to %v include subaccount %v\n", v.Userid, v.Assetid, v.Starttime, v.Endtime, v.Includesubaccount)
 					} else {
 						total_finished += 1
 					}
@@ -684,9 +729,24 @@ func main() {
 				case "searchuser":
 					user := splited_string[1]
 					var users_snap []Snapshotindb
+					var user_indb MixinAccountindb
+					db.Where(&MixinAccountindb{Userid: user}).First(&user_indb)
+					log.Println("hello", user_indb.ID, user_indb.Userid, user_indb.CreatedAt)
 					db.Where(&Snapshotindb{UserId: user}).Find(&users_snap)
 					for _, v := range users_snap {
 						result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
+					}
+				case "searchusersnap":
+					user := splited_string[1]
+					var mixin_acount MixinAccountindb
+					db.Where(&MixinAccountindb{Userid: user}).Find(&mixin_acount)
+					if mixin_acount.ID == 0 {
+						log.Println("no user record")
+					} else {
+						start_t := mixin_acount.Utccreated_at
+						end_t := start_t.Add(time.Hour * 4)
+						real_t := time.Date(2019, 6, 15, 0, 0, 0, 0, time.UTC)
+						search_userincome(XLM_ASSET_ID, mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, real_t, end_t)
 					}
 				case "createpayment":
 					if len(splited_string) > 1 {
@@ -701,6 +761,10 @@ func main() {
 							db.Create(&new_req)
 							free_mixinaccount.ClientReqid = new_req.ID
 							db.Save(&free_mixinaccount)
+							start_time := time.Now()
+							end_time := start_time.Add(time.Hour * 4)
+							search_userincome(EOS_ASSET_ID, free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_time, end_time)
+							search_userincome(XLM_ASSET_ID, free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_time, end_time)
 							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", free_mixinaccount.ID, free_mixinaccount.Userid, new_req.ID)
 							var payment_addresses []DepositAddressindb
 							db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
@@ -711,7 +775,7 @@ func main() {
 									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
 								}
 							}
-							search_income_for_payment(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, time.Now(), new_req.ID)
+
 						} else {
 							//no avaible mixin account, create more by send channel
 							should_create_more_account_c <- 1
@@ -745,7 +809,10 @@ func main() {
 									go read_asset_deposit_address(v, new_user.Userid, new_user.Sessionid, new_user.Privatekey, account_deposit_address_receive_chan)
 								}
 								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
-								search_income_for_payment(user_config, my_snapshot_chan, progress_chan, default_asset_id_group, time.Now(), new_req.ID)
+								start_t := time.Now()
+								end_t := start_t.Add(time.Hour * 4)
+								search_userincome(EOS_ASSET_ID, free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t)
+								search_userincome(XLM_ASSET_ID, free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t)
 							}
 						}
 
@@ -821,7 +888,7 @@ func main() {
 								continue
 							}
 							for _, v := range resp.Data {
-								log.Println(v.Assetid, v.Balance)
+								log.Println(this_user.UserId, v.Assetid, v.Balance)
 								if v.Balance == "0" {
 									continue
 								} else {
@@ -853,7 +920,9 @@ func main() {
 					var lastsnap Snapshotindb
 					db.Last(&lastsnap)
 					result += fmt.Sprintf("at %v %v %v", lastsnap.CreatedAt, lastsnap.Amount, lastsnap.AssetId)
+
 				}
+
 			}
 			result += "allsnap: read all snap\n"
 			result += "status: ongoing search task\n"
