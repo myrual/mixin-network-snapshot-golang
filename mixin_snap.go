@@ -825,7 +825,7 @@ func main() {
 						var mixin_account MixinAccountindb
 						db.Find(&mixin_account, req.MixinAccountid)
 						if mixin_account.ID != 0 {
-							result += fmt.Sprintf("Record found : %v user id %v\n", req.Callbackurl, mixin_account.Userid)
+							result += fmt.Sprintf("Record found : %v\nuser id %v\n", req.Callbackurl, mixin_account.Userid)
 							var payment_addresses []DepositAddressindb
 							db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID}).Find(&payment_addresses)
 							for _, v := range payment_addresses {
@@ -835,6 +835,34 @@ func main() {
 									result += fmt.Sprintf("Asset : %v Payment name %v tag %v\n", v.Assetid, v.Accountname, v.Accounttag)
 								}
 							}
+							result += "\n all snapshot:\n"
+							var users_snap []Snapshotindb
+							db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&users_snap)
+							for _, v := range users_snap {
+								result += fmt.Sprintf("at %v with id: %v amount:%v asset %v to %v by %v\n", v.SnapCreatedAt, v.SnapshotId, v.Amount, v.AssetId, v.UserId, v.Source)
+							}
+							result += "\n balance:\n"
+							this_user := mixin.NewUser(mixin_account.Userid, mixin_account.Sessionid, mixin_account.Privatekey, mixin_account.Pin, mixin_account.Pintoken)
+							balance, err := this_user.ReadAssets()
+							if err != nil {
+								log.Println(err)
+								continue
+							} else {
+								var resp BalanceResponse
+								err = json.Unmarshal(balance, &resp)
+								if err != nil {
+									log.Println(err)
+									continue
+								}
+								if resp.Error != "" {
+									log.Println(resp.Error)
+									continue
+								}
+								for _, v := range resp.Data {
+									result += fmt.Sprintf("asset id: %v, %v\n", v.Assetid, v.Balance)
+								}
+							}
+
 						} else {
 							result += fmt.Sprintf("Record found, but no payment channel is missing")
 						}
