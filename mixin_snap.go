@@ -474,7 +474,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					userid:            user_config.user_id,
 					sessionid:         user_config.session_id,
 					privatekey:        user_config.private_key,
-					includesubaccount: false,
+					includesubaccount: true,
 				}
 				log.Println("fire read snap for asset id", v, " for me and all sub account", user_config.user_id)
 				go read_snap(search_asset_task, my_snapshot_chan, in_progress_c)
@@ -487,7 +487,7 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 				userid:            user_config.user_id,
 				sessionid:         user_config.session_id,
 				privatekey:        user_config.private_key,
-				includesubaccount: false,
+				includesubaccount: true,
 			}
 			log.Println("fire read snap for all asset for me and all sub account", user_config.user_id)
 			go read_snap(all_asset_task, my_snapshot_chan, in_progress_c)
@@ -528,20 +528,7 @@ func main() {
 	}
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
-	//restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
-	mysnap, err := mixin.MyNetworkSnapshots("", time.Now(), false, 10, user_config.user_id, user_config.session_id, user_config.private_key)
-	if err != nil {
-	} else {
-		var resp MixinResponse
-		err = json.Unmarshal(mysnap, &resp)
-		if err != nil {
-			log.Println("decoding error")
-		} else {
-			mysnaps := resp.Data
-			firstone := mysnaps[0]
-			log.Println(firstone.SnapshotId, firstone.CreatedAt, firstone.Type)
-		}
-	}
+	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
 	promot := "allsnap: read all snap\n"
 	promot += "status: ongoing search task\n"
 	promot += "your selection:"
