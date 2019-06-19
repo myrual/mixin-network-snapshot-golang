@@ -315,11 +315,8 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 			return
 		}
 		len_of_snap := len(resp.Data)
-		log.Println("len of data  before push to chan", len_of_snap)
 		for _, v := range resp.Data {
 			if req_task.includesubaccount == false {
-				//all result is abou me
-				log.Println(v.CreatedAt, v.SnapshotId, v.Asset.AssetId, v.Amount, v.OpponentId, v.TraceId, v.Source, v.UserId)
 				result_chan <- v
 			} else if v.UserId != "" {
 				result_chan <- v
