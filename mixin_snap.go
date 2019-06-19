@@ -219,8 +219,9 @@ const (
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
 
-	ADMIN_UUID    = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
-	PREDEFINE_PIN = "198435"
+	ADMIN_UUID     = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
+	PREDEFINE_PIN  = "198435"
+	PREDEFINE_NAME = "tom"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -685,8 +686,7 @@ func main() {
 			available_mixin_account := len(free_mixinaccounts)
 			if available_mixin_account < 10 {
 				for i := 20; i > available_mixin_account; i-- {
-					const predefine_pin string = "123456"
-					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
+					go create_mixin_account(PREDEFINE_NAME, PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
 				}
 			}
 
@@ -779,7 +779,7 @@ func main() {
 							//no avaible mixin account, create more by send channel
 							should_create_more_account_c <- 1
 							//create one in blocking mode
-							user, err := mixin.CreateAppUser("tom", PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key)
+							user, err := mixin.CreateAppUser(PREDEFINE_NAME, PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key)
 							if err != nil {
 								log.Println(err)
 							} else {
@@ -847,8 +847,7 @@ func main() {
 						result += fmt.Sprintf("No matched record")
 					}
 				case "createuser":
-					const predefine_pin string = "123456"
-					go create_mixin_account("tom", predefine_pin, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
+					go create_mixin_account("tom", PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
 				case "listusers":
 					var allaccount []MixinAccountindb
 					db.Find(&allaccount)
