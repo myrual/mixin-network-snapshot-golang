@@ -126,6 +126,7 @@ type Searchtaskindb struct {
 	Sessionid         string
 	Privatekey        string
 	Includesubaccount bool
+	Taskexpired_at    time.Time
 }
 
 type BotConfig struct {
@@ -181,16 +182,17 @@ type ProfileResponse struct {
 	Error string   `json:"error"`
 }
 type Searchtask struct {
-	start_t           time.Time
-	end_t             time.Time
-	yesterday2today   bool
-	max_len           int
-	asset_id          string
-	ongoing           bool
-	userid            string
-	sessionid         string
-	privatekey        string
-	includesubaccount bool
+	start_t            time.Time
+	end_t              time.Time
+	yesterday2today    bool
+	max_len            int
+	asset_id           string
+	ongoing            bool
+	userid             string
+	sessionid          string
+	privatekey         string
+	includesubaccount  bool
+	task_expired_after time.Time
 }
 
 type Searchprogress struct {
@@ -286,6 +288,16 @@ func read_bot_created_time(user_id string, session_id string, private_key string
 
 func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_progress_c chan Searchprogress) {
 	for {
+
+		if req_task.end_t.IsZero() == false && time.Now().After(req_task.end_t) {
+			log.Println("Exit task because user set end time and it is passed now ")
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			p.search_task.ongoing = false
+			in_progress_c <- p
+			return
+		}
 		var snaps []byte
 		var err error
 		if req_task.includesubaccount {
@@ -321,45 +333,25 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		}
 		if len_of_snap == 0 {
 			log.Println("Nothing found ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
-			if req_task.end_t.IsZero() == false && time.Now().After(req_task.end_t) {
-				//nothing is searched, now is after expected end time, should expired
-				log.Println("No ", req_task.asset_id, "After ", req_task.start_t)
-				p := Searchprogress{
-					search_task: req_task,
-				}
-				p.search_task.ongoing = false
-				in_progress_c <- p
-				return
-			} else {
-				p := Searchprogress{
-					search_task: req_task,
-				}
-				in_progress_c <- p
-				//nothing is searched, wait
-				time.Sleep(60 * time.Second)
-				continue
+			p := Searchprogress{
+				search_task: req_task,
 			}
-
+			in_progress_c <- p
+			//nothing is searched, wait
+			time.Sleep(60 * time.Second)
+			continue
 		} else {
-
 			last_element := resp.Data[len(resp.Data)-1]
 			req_task.start_t = last_element.CreatedAt
 			p := Searchprogress{
 				search_task: req_task,
 			}
 			p.search_task.start_t = last_element.CreatedAt
-
-			if req_task.end_t.IsZero() == false && last_element.CreatedAt.After(req_task.end_t) {
-				p.search_task.ongoing = false
-				in_progress_c <- p
-				return
-			} else {
-				p.search_task.ongoing = true
-				in_progress_c <- p
-				if len_of_snap < req_task.max_len {
-					log.Println(len_of_snap, "is less than 500 ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
-					time.Sleep(30 * time.Second)
-				}
+			p.search_task.ongoing = true
+			in_progress_c <- p
+			if len_of_snap < req_task.max_len {
+				log.Println(len_of_snap, "is less than 500 ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
+				time.Sleep(30 * time.Second)
 			}
 		}
 	}
@@ -367,6 +359,14 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 
 func read_mysnap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c chan Searchprogress) {
 	for {
+		if req_task.task_expired_after.IsZero() == false && time.Now().After(req_task.task_expired_after) {
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			p.search_task.ongoing = false
+			in_progress_c <- p
+			return
+		}
 		var snaps []byte
 		var err error
 		snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
@@ -461,20 +461,83 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	}
 }
 
-func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time) {
+func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time, search_expired_after time.Time) {
 	req_task := Searchtask{
-		start_t:           created_at,
-		end_t:             end_at,
-		max_len:           500,
-		yesterday2today:   false,
-		asset_id:          asset_id,
-		userid:            userid,
-		sessionid:         sessionid,
-		privatekey:        privatekey,
-		ongoing:           true,
-		includesubaccount: false,
+		start_t:            end_at,
+		end_t:              created_at,
+		max_len:            500,
+		yesterday2today:    false,
+		asset_id:           asset_id,
+		userid:             userid,
+		sessionid:          sessionid,
+		privatekey:         privatekey,
+		ongoing:            true,
+		includesubaccount:  false,
+		task_expired_after: search_expired_after,
 	}
-	go read_mysnap(req_task, in_result_chan, in_progress_c)
+	for {
+		if req_task.task_expired_after.IsZero() == false && time.Now().After(req_task.task_expired_after) {
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			p.search_task.ongoing = false
+			in_progress_c <- p
+			log.Println("task is expired")
+			return
+		}
+		var snaps []byte
+		var err error
+		snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+
+		if err != nil {
+			in_progress_c <- Searchprogress{
+				Error: err,
+			}
+			continue
+		}
+
+		var resp MixinResponse
+		err = json.Unmarshal(snaps, &resp)
+
+		if err != nil {
+			in_progress_c <- Searchprogress{
+				Error: err,
+			}
+			continue
+		}
+		if resp.Error != "" {
+			log.Fatal("Server return error", resp.Error, " for req:", req_task.asset_id, " start ", req_task.start_t)
+			return
+		}
+		len_of_snap := len(resp.Data)
+		for _, v := range resp.Data {
+			v.UserId = req_task.userid
+			in_result_chan <- v
+		}
+		if len_of_snap == 0 {
+			req_task.start_t = time.Now()
+			log.Println("less data than expected found search_userincome ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			in_progress_c <- p
+			time.Sleep(30 * time.Second)
+		} else {
+			last_element := resp.Data[len(resp.Data)-1]
+			req_task.start_t = last_element.CreatedAt
+			p := Searchprogress{
+				search_task: req_task,
+			}
+			p.search_task.start_t = last_element.CreatedAt
+
+			if req_task.end_t.IsZero() == false && last_element.CreatedAt.Before(req_task.end_t) {
+				p.search_task.ongoing = false
+				in_progress_c <- p
+				return
+			}
+			in_progress_c <- p
+		}
+	}
 }
 func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
 	if len(searchtasks_array_indb) > 0 {
@@ -482,19 +545,20 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 			if v.Ongoing == true {
 				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Userid, v.Assetid)
 				unfinished_req_task := Searchtask{
-					start_t:           v.Starttime,
-					end_t:             v.Endtime,
-					max_len:           500,
-					yesterday2today:   v.Yesterday2today,
-					asset_id:          v.Assetid,
-					ongoing:           v.Ongoing,
-					userid:            v.Userid,
-					sessionid:         v.Sessionid,
-					privatekey:        v.Privatekey,
-					includesubaccount: v.Includesubaccount,
+					start_t:            v.Starttime,
+					end_t:              v.Endtime,
+					max_len:            500,
+					yesterday2today:    v.Yesterday2today,
+					asset_id:           v.Assetid,
+					ongoing:            v.Ongoing,
+					userid:             v.Userid,
+					sessionid:          v.Sessionid,
+					privatekey:         v.Privatekey,
+					includesubaccount:  v.Includesubaccount,
+					task_expired_after: v.Taskexpired_at,
 				}
 				if v.Includesubaccount == false {
-					go read_mysnap(unfinished_req_task, in_result_chan, in_progress_c)
+					go search_userincome(v.Assetid, v.Userid, v.Sessionid, v.Privatekey, in_result_chan, in_progress_c, v.Endtime, time.Now(), time.Now().Add(time.Hour*4))
 				} else {
 					if v.Yesterday2today {
 						go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
@@ -594,6 +658,7 @@ func main() {
 					Sessionid:         pv.search_task.sessionid,
 					Privatekey:        pv.search_task.privatekey,
 					Includesubaccount: pv.search_task.includesubaccount,
+					Taskexpired_at:    pv.search_task.task_expired_after,
 				}
 				db.Create(&this_record)
 			} else {
@@ -637,25 +702,6 @@ func main() {
 					var matched_req ClientReq
 					db.First(&matched_req, matched_account.ClientReqid)
 					payment_received_asset_chan <- matched_req
-					this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
-					trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Amount, v.Asset.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
-					if trans_err != nil {
-						log.Println(trans_err)
-					} else {
-						var resp TransferNetRespone
-						err = json.Unmarshal(trans_result, &resp)
-
-						if err != nil {
-							log.Println(err)
-						} else {
-							if resp.TransferRes.Error != "" {
-								log.Println(resp.TransferRes.Error)
-							} else {
-								log.Println(resp.TransferRes.Data.Snapshotid)
-							}
-						}
-
-					}
 				}
 			}
 
@@ -767,9 +813,7 @@ func main() {
 					if mixin_acount.ID == 0 {
 						log.Println("no user record")
 					} else {
-						start_t := time.Now()
-						end_t := mixin_acount.Utccreated_at
-						search_userincome(XLM_ASSET_ID, mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t)
+						go search_userincome(XLM_ASSET_ID, mixin_acount.Userid, mixin_acount.Sessionid, mixin_acount.Privatekey, my_snapshot_chan, global_progress_c, mixin_acount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
 					}
 				case "createpayment":
 					if len(splited_string) > 1 {
@@ -784,9 +828,7 @@ func main() {
 							db.Create(&new_req)
 							free_mixinaccount.ClientReqid = new_req.ID
 							db.Save(&free_mixinaccount)
-							start_time := free_mixinaccount.Utccreated_at
-							end_time := start_time.Add(time.Hour * 4)
-							search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_time, end_time)
+							go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
 							result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", free_mixinaccount.ID, free_mixinaccount.Userid, new_req.ID)
 							var payment_addresses []DepositAddressindb
 							db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
@@ -833,7 +875,7 @@ func main() {
 								result += fmt.Sprintf("new req created with record id: %v, user id: %v, with client request %v\n", new_user.ID, new_user.Userid, new_req.ID)
 								start_t := new_user.Utccreated_at
 								end_t := start_t.Add(time.Hour * 4)
-								search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t)
+								go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, start_t, end_t, time.Now().Add(time.Hour*4))
 							}
 						}
 
