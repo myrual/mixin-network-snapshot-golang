@@ -289,8 +289,6 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		var snaps []byte
 		var err error
 		if req_task.includesubaccount {
-			log.Println("req_task.includesubaccount:", req_task.includesubaccount, "userid:", req_task.userid, "sessionid:", req_task.sessionid, "privatekey:", req_task.privatekey)
-
 			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, true, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 		}
 
@@ -316,7 +314,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		}
 		len_of_snap := len(resp.Data)
 		for _, v := range resp.Data {
-			log.Println(v.SnapshotId, v.Type, v.CreatedAt)
+
 			if v.UserId != "" {
 				result_chan <- v
 			}
@@ -360,9 +358,6 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 				in_progress_c <- p
 				if len_of_snap < req_task.max_len {
 					log.Println(len_of_snap, "is less than 500 ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
-					for _, v := range resp.Data {
-						log.Println(v.CreatedAt, v.SnapshotId, v.Amount, v.Asset, v.UserId)
-					}
 					time.Sleep(30 * time.Second)
 				}
 			}
@@ -374,7 +369,6 @@ func read_mysnap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c 
 	for {
 		var snaps []byte
 		var err error
-		log.Println("req_task.includesubaccount:", req_task.includesubaccount, "userid:", req_task.userid, "sessionid:", req_task.sessionid, "privatekey:", req_task.privatekey)
 		snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 
 		if err != nil {
@@ -399,7 +393,6 @@ func read_mysnap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c 
 		}
 		len_of_snap := len(resp.Data)
 		for _, v := range resp.Data {
-			log.Println(v.SnapshotId, v.Type, v.CreatedAt)
 			v.UserId = req_task.userid
 			result_chan <- v
 		}
@@ -468,7 +461,7 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	}
 }
 
-func search_userincome(asset_id string, userid string, sessionid string, privatekey string, my_snapshot_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time) {
+func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time) {
 	req_task := Searchtask{
 		start_t:           created_at,
 		end_t:             end_at,
@@ -481,7 +474,7 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		ongoing:           true,
 		includesubaccount: false,
 	}
-	go read_mysnap(req_task, my_snapshot_chan, in_progress_c)
+	go read_mysnap(req_task, in_result_chan, in_progress_c)
 }
 func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
 	if len(searchtasks_array_indb) > 0 {
@@ -504,9 +497,9 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					go read_mysnap(unfinished_req_task, in_result_chan, in_progress_c)
 				} else {
 					if v.Yesterday2today {
-				go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
-			}
-		}
+						go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
+					}
+				}
 
 			}
 		}
@@ -535,6 +528,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 
 func main() {
 	var my_snapshot_chan = make(chan *Snapshot, 1000)
+	var asset_received_snap_chan = make(chan *Snapshot, 1000)
 	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 	var user_cmd_chan = make(chan string, 10)
@@ -627,38 +621,44 @@ func main() {
 				}
 				db.Create(&thisrecord)
 				f, err := strconv.ParseFloat(v.Amount, 64)
-				if f > 0 {
-					var matched_account MixinAccountindb
-					db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
-					if matched_account.ID != 0 {
-						if matched_account.ClientReqid != 0 {
-							var matched_req ClientReq
-							db.First(&matched_req, matched_account.ClientReqid)
-							payment_received_asset_chan <- matched_req
-							this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
-							trans_result, trans_err := this_user.Transfer(ADMIN_UUID, thisrecord.Amount, thisrecord.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
-							if trans_err != nil {
-								log.Println(trans_err)
-							} else {
-								var resp TransferNetRespone
-								err = json.Unmarshal(trans_result, &resp)
-
-								if err != nil {
-									log.Println(err)
-								} else {
-									if resp.TransferRes.Error != "" {
-										log.Println(resp.TransferRes.Error)
-									} else {
-										log.Println(resp.TransferRes.Data.Snapshotid)
-									}
-								}
-
-							}
-						}
+				if err != nil {
+					log.Println(err)
+				} else {
+					if f > 0 {
+						asset_received_snap_chan <- v
 					}
 				}
-
 			}
+		case v := <-asset_received_snap_chan:
+			var matched_account MixinAccountindb
+			db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
+			if matched_account.ID != 0 {
+				if matched_account.ClientReqid != 0 {
+					var matched_req ClientReq
+					db.First(&matched_req, matched_account.ClientReqid)
+					payment_received_asset_chan <- matched_req
+					this_user := mixin.NewUser(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
+					trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Amount, v.Asset.AssetId, matched_req.Callbackurl, uuid.Must(uuid.NewV4()).String())
+					if trans_err != nil {
+						log.Println(trans_err)
+					} else {
+						var resp TransferNetRespone
+						err = json.Unmarshal(trans_result, &resp)
+
+						if err != nil {
+							log.Println(err)
+						} else {
+							if resp.TransferRes.Error != "" {
+								log.Println(resp.TransferRes.Error)
+							} else {
+								log.Println(resp.TransferRes.Data.Snapshotid)
+							}
+						}
+
+					}
+				}
+			}
+
 		case v := <-payment_received_asset_chan:
 			var account MixinAccountindb
 			db.Find(&account, v.MixinAccountid)
