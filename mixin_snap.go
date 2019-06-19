@@ -289,11 +289,8 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 		var snaps []byte
 		var err error
 		if req_task.includesubaccount {
-			log.Println("whole network")
 			snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 		} else {
-
-			log.Println(req_task.userid, req_task.sessionid, req_task.privatekey, "my network")
 			snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.yesterday2today, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 		}
 
@@ -326,12 +323,8 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 				result_chan <- v
 			} else if v.UserId != "" {
 				result_chan <- v
-			} else {
-				log.Println("found one snapshot without user id", v.SnapshotId)
 			}
 		}
-		len_of_snapafter := len(resp.Data)
-		log.Println("len of data  after push to chan", len_of_snapafter)
 		if len_of_snap == 0 {
 			log.Println("Nothing found ", req_task.asset_id, "After ", req_task.start_t, " when searching ", req_task.asset_id, " for ", req_task.userid, " end ", req_task.end_t)
 			if req_task.end_t.IsZero() == false && time.Now().After(req_task.end_t) {
@@ -377,7 +370,6 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 					time.Sleep(30 * time.Second)
 				}
 			}
-
 		}
 	}
 }
