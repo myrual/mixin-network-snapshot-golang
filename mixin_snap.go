@@ -317,6 +317,7 @@ func read_snap(req_task Searchtask, result_chan chan *Snapshot, in_progress_c ch
 		len_of_snap := len(resp.Data)
 		for _, v := range resp.Data {
 			if req_task.includesubaccount == false {
+				v.UserId = req_task.userid
 				result_chan <- v
 			} else if v.UserId != "" {
 				result_chan <- v
@@ -427,7 +428,6 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 	go read_snap(req_task, my_snapshot_chan, in_progress_c)
 }
 func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
-	log.Println("Total ", len(searchtasks_array_indb), " search task")
 	if len(searchtasks_array_indb) > 0 {
 		for _, v := range searchtasks_array_indb {
 			if v.Ongoing == true {
@@ -444,7 +444,6 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					privatekey:        v.Privatekey,
 					includesubaccount: v.Includesubaccount,
 				}
-				log.Printf("asset %v start at %v to %v last include subaccount %v", unfinished_req_task.asset_id, unfinished_req_task.start_t, unfinished_req_task.end_t, v.Includesubaccount)
 				go read_snap(unfinished_req_task, my_snapshot_chan, in_progress_c)
 			}
 		}
@@ -465,7 +464,6 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 					privatekey:        user_config.private_key,
 					includesubaccount: true,
 				}
-				log.Println("fire read snap for asset id", v, " for me and all sub account", user_config.user_id)
 				go read_snap(search_asset_task, my_snapshot_chan, in_progress_c)
 			}
 			all_asset_task := Searchtask{
@@ -478,7 +476,6 @@ func restore_searchsnap(user_config BotConfig, my_snapshot_chan chan *Snapshot, 
 				privatekey:        user_config.private_key,
 				includesubaccount: true,
 			}
-			log.Println("fire read snap for all asset for me and all sub account", user_config.user_id)
 			go read_snap(all_asset_task, my_snapshot_chan, in_progress_c)
 		}
 	}
@@ -562,7 +559,7 @@ func main() {
 			snapInDb := Snapshotindb{
 				SnapshotId: v.SnapshotId,
 			}
-			log.Println(v.CreatedAt, v.SnapshotId, v.Asset, v.Amount)
+			log.Println(v.CreatedAt, v.SnapshotId, v.Asset, v.Amount, v.UserId)
 			db.First(&snapInDb, "snapshot_id = ?", v.SnapshotId)
 			if snapInDb.CreatedAt.IsZero() {
 				var thisrecord = Snapshotindb{
