@@ -61,7 +61,10 @@ Example:
 ```shell
 curl -d '{"reqid":"value8", "callback":":9090/"}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
-
+the result from the curl is following, you can see the deposit address for EOS and XLM.
+```json
+{"Reqid":"value9","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}],"Payment_records":null,"Balance":null}
+```
 #### Get payment status
 fetch the payment status
 
