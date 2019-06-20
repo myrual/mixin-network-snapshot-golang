@@ -8,8 +8,13 @@ Visit https://mixin.one/messenger to download App from AppStore, Google Play.
 ### 2. Active developer account and create an app
 Log in to https://developer.mixin.one with your mixin messenger account
 
+There is a [tutorial](https://mixin-network.gitbook.io/mixin-network/mixin-messenger-app/create-bot-account)
+
 ### Clone, build, run
-1. Clone 
+```shell
+git clone https://github.com/myrual/mixin-network-snapshot-golang
+```
+
 2. Edit config
 3. Build
 4. Run
