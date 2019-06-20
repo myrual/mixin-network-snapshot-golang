@@ -262,6 +262,7 @@ const (
 	PREDEFINE_NAME           = "tom"
 	scan_interval_in_seconds = 10
 	op_all_money_go_home     = "allmoneygohome"
+	scan_stop_after_n_hour   = 4
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -639,7 +640,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					task_expired_after: v.Taskexpired_at,
 				}
 				if v.Includesubaccount == false {
-					go search_userincome(v.Assetid, v.Userid, v.Sessionid, v.Privatekey, in_result_chan, in_progress_c, v.Endtime, time.Now(), time.Now().Add(time.Hour*4))
+					go search_userincome(v.Assetid, v.Userid, v.Sessionid, v.Privatekey, in_result_chan, in_progress_c, v.Endtime, time.Now(), time.Now().Add(time.Hour*scan_stop_after_n_hour))
 				} else {
 					if v.Yesterday2today {
 						go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
