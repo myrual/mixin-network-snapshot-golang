@@ -1,4 +1,4 @@
-# crypto currency payment module for web store
+# A plugin enable web app accept crypto currency payment
 Web developer can accept cryptocurrency without pain.
 Steps:
 ### 1. Create a Mixin Messenger account.
@@ -48,6 +48,9 @@ go build mixin_snap.go
 ```shell
 ./mixin_snap
 ```
+
+5. Database
+A sqlite3 file with name test.db will be generated in same folder.
 
 ## How to 
 #### Create payment request
