@@ -15,10 +15,36 @@ There is a [tutorial](https://mixin-network.gitbook.io/mixin-network/mixin-messe
 git clone https://github.com/myrual/mixin-network-snapshot-golang
 ```
 
-2. Edit config
+2. Edit some of code
+```go
+const (
+	userid      = "3c5fd587-5ac3-4fb6-b294-423ba3473f7d"
+	sessionid   = "42848ded-0ffd-45eb-9b46-094d5542ee01"
+	private_key = `-----BEGIN RSA PRIVATE KEY-----
+MIICXAIBAAKBgQDACTrT4uaB9el9qe0MUOsFrm8kpaDI9PowauMB1Ha25mpfL+5h
+MFqISLS5z2P89nAsXBg+KyQ2gAVA6rBwW/ZqOc1PKiJhhLBS80nzo3ayfv7OlzNG
+IxMyqD5izCCtPixnqpuTePoPWq4CNZlxop0VYklsWEfU0U0qqMBgmtqYfQIDAQAB
+AoGAR8crZed5oTn5fC73m5LjRcxdXqVJ49MtcMuC7jwr41FckRepUkpwjGAgrRMH
+nJXAd9Q0e4hEkNppHEqciGLXR1dQfZnaM1Gnv7mD3oSgHaH+4qAMnNOCpvwW4Eu3
+yp9b1UGj9SvM3D2BrpA+MGf0E/yEJzpRcT956W6SPYYSegECQQDm4uTK+teoxr1Z
+agJZuCta+IhMzpxIWMob+JN/Huf7OnRcIa9JpXngg4tHOUWmZCDQdqeJMpaQc8SQ
+44hba015AkEA1OyJswNIhdmvVp5P1zgREVVRK6JloYwmAtj+Qo4pWJ117LqH4w+b
+491r4AeLEGh8VrZ4k6Hp+Cm783S2jTAWJQJARbWdlHdV45xVkQiDuyjy1h2RsXb0
+EpfUNcvAZLIlImIMvcBh1x+CA7pTs+Zj1BAJJEee37qJYQXDBGfeRJPKKQJAVG+c
+x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
+9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
+6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
+-----END RSA PRIVATE KEY-----`
+)
+```
 3. Build
+```shell
+go build mixin_snap.go
+```
 4. Run
-
+```shell
+./mixin_snap
+```
 
 ### Create payment by http post
 Create payment with request id value8, let the program visit http://127.0.0.1:9090/ with http POST 
