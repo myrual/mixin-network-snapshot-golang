@@ -13,11 +13,16 @@ Log in to https://developer.mixin.one with your mixin messenger account
 
 
 ### Create payment by http post
-Create a payment with unique id value7, and let the program fire a http post to callbackurl when received payment
+Create payment with request id value8, let the program visit http://127.0.0.1:9090/ with http POST 
 
 ```shell
-curl -d '{"reqid":"value7", "callback":"callbackurl"}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
+curl -d '{"reqid":"value8", "callback":":9090/"}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
+The http post body will be 
+```json
+{"Reqid":"value8","Callbackurl":":9090/","Paymentrecord":{"Amount":"0.01","AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1","created_at":"2019-06-20T07:33:06.445471337Z","snapshot_id":"a6603374-509b-4015-a192-c63bfa8def5f"}}
+```
+
 ### Get payment status by http get
 fetch the payment status
 ```shell
