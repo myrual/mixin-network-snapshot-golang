@@ -263,6 +263,7 @@ const (
 	scan_interval_in_seconds = 10
 	op_all_money_go_home     = "allmoneygohome"
 	scan_stop_after_n_hour   = 4
+	local_web_port           = ":8080"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -471,7 +472,7 @@ func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
 
 	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(local_web_port, nil))
 	log.Println("after web")
 }
 
