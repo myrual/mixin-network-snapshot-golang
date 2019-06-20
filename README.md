@@ -2,6 +2,9 @@
 Web developer can accept cryptocurrency without pain.
 Steps:
 ### 1. Create a Mixin Messenger account.
+Visit https://mixin.one/messenger to download App from AppStore, Google Play.
+中国大陆用户可以访问 https://a.app.qq.com/o/simple.jsp?pkgname=one.mixin.messenger  下载
+
 ### 2. Active developer account and create an app
 Log in to https://developer.mixin.one with your mixin messenger account
 
