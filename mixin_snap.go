@@ -272,6 +272,7 @@ const (
 	XIN_ASSET_ID  = "c94ac88f-4671-3976-b60a-09064f1811e8"
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
+	TRON_ASSET_ID = "25dabac5-056a-48ff-b9f9-f67395dc407c"
 
 	PREDEFINE_PIN            = "198435"
 	PREDEFINE_NAME           = "tom"
@@ -720,10 +721,10 @@ func main() {
 	var payment_received_asset_chan = make(chan CallbackRespone, 100)
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
-
+	// to support more asset, just add them in the following array
+	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
 	timer1 := time.NewTimer(1 * time.Minute)
 
-	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
 	db, err := gorm.Open("sqlite3", "test.db")
 	if err != nil {
 		panic("failed to connect database")
