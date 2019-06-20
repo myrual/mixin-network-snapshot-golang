@@ -691,10 +691,6 @@ func main() {
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
 	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
-	promot := "allsnap: read all snap\n"
-	promot += "status: ongoing search task\n"
-	promot += "your selection:"
-	user_output_chan <- promot
 	go user_interact(req_cmd_chan, user_output_chan)
 
 	should_create_more_account_c <- 1
@@ -762,8 +758,6 @@ func main() {
 						asset_received_snap_chan <- v
 					}
 				}
-			} else {
-				log.Println(v)
 			}
 		case v := <-asset_received_snap_chan:
 			var matched_account MixinAccountindb
