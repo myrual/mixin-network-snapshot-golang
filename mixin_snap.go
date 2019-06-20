@@ -400,9 +400,7 @@ func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Re
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			log.Println(r.URL.Query())
 			keys, ok := r.URL.Query()["reqid"]
-			log.Println(keys)
 			if ok != true || len(keys[0]) < 1 {
 				io.WriteString(w, "Missing parameter reqid!\n")
 				return
@@ -494,7 +492,6 @@ func all_money_gomyhome(userid string, sessionid string, privatekey string, pin 
 			return
 		}
 		for _, v := range resp.Data {
-			log.Println(this_user.UserId, v.Assetid, v.Balance)
 			if v.Balance == "0" {
 				continue
 			} else {
@@ -860,14 +857,12 @@ func main() {
 			}
 		case v := <-req_cmd_chan:
 			if v.Method == "GET" {
-				log.Println("GET", v.Reqid)
 				payment_id := v.Reqid
 				var req ClientReq
 				var res PaymentRes
 				response_c := v.Res_c
 				db.Where(&ClientReq{Reqid: payment_id}).Find(&req)
 				if req.ID != 0 {
-					log.Println("GET req record with ", v.Reqid)
 					res.Reqid = v.Reqid
 					var mixin_account MixinAccountindb
 					db.Find(&mixin_account, req.MixinAccountid)
@@ -913,7 +908,6 @@ func main() {
 					response_c <- res
 				}
 			} else {
-				log.Println("POST", v.Reqid, v.Callback)
 				unique_id := v.Reqid
 				response_c := v.Res_c
 				var res PaymentRes
@@ -929,7 +923,6 @@ func main() {
 					db.Create(&new_req)
 					free_mixinaccount.ClientReqid = new_req.ID
 					db.Save(&free_mixinaccount)
-					log.Println("POST", new_req.Reqid, new_req.Callbackurl, free_mixinaccount.Userid)
 					go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
 					var payment_addresses []DepositAddressindb
 					db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
