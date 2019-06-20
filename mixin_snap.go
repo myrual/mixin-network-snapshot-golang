@@ -34,6 +34,8 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
+
+	ADMIN_UUID = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
 )
 
 type Snapshot struct {
@@ -263,7 +265,6 @@ const (
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
 
-	ADMIN_UUID               = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
 	PREDEFINE_PIN            = "198435"
 	PREDEFINE_NAME           = "tom"
 	scan_interval_in_seconds = 10
