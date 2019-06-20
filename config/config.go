@@ -41,10 +41,6 @@ func LoadConfig(dir string) {
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	conf.System.Operators = make(map[string]bool)
-	for _, op := range conf.System.OperatorList {
-		conf.System.Operators[op] = true
-	}
 }
 
 func Get() *Config {
