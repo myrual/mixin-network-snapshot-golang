@@ -88,8 +88,8 @@ http method is POST, http body will be
 
 
 ### Get all payment asset
-1. All income payment will be automatically sent to your own Mixin Messenger account.
-### Manually send all money to your Mixin Messenger account
+1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account.
+2. You can also manually send all money to your Mixin Messenger account
 ```shell
 curl -X POST -H "Content-Type: application/json" 127.0.0.1:8080/moneygohome
 ```
@@ -98,3 +98,13 @@ response will be similar to follow
 ```json
 total 20 account will send all balance to admin
 ```
+
+### Confirmation times
+1. EOS: 3 minutes
+
+### Support cryptocurrency
+BTC, USDT, BCH, ETH and ERC20,ETC, EOS and token issue on, DASH, Litecoin, Doge,Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
+
+### Recommend Currency
+
+Default Crypty currency is EOS and XLM because transaction can be confirmed in 3 minutes.
