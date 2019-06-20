@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	messenger "github.com/MooooonStar/mixin-sdk-go/messenger"
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
 	"github.com/gofrs/uuid"
 	"github.com/jinzhu/gorm"
@@ -35,7 +37,7 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
 
-	ADMIN_UUID = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
+	ADMIN_MessengerID = "31367"
 )
 
 type Snapshot struct {
@@ -118,6 +120,12 @@ type DepositAddressindb struct {
 	Accounttag       string
 	Iconurl          string
 	Confirmblock     uint
+}
+
+type MessengerUserindb struct {
+	gorm.Model
+	Messengerid string `gorm:"primary_key"`
+	Uuid        string
 }
 
 type ClientReq struct {
@@ -267,7 +275,7 @@ const (
 
 	PREDEFINE_PIN            = "198435"
 	PREDEFINE_NAME           = "tom"
-	scan_interval_in_seconds = 10
+	scan_interval_in_seconds = 5
 	op_all_money_go_home     = "allmoneygohome"
 	scan_stop_after_n_hour   = 4
 	local_web_port           = ":8080"
@@ -316,6 +324,19 @@ func read_asset_deposit_address(asset_id string, user_id string, session_id stri
 //    the routine will read and filter snapshot between the kick off and end time,
 //    filter snapshot and push data to channel, and progress to another channel
 
+func read_useruuid_from(user_id string, session_id string, private_key string, messengerid string) string {
+	botUser := messenger.NewMessenger(user_id, session_id, private_key)
+	ctx := context.Background()
+	user, err := botUser.SearchUser(ctx, ADMIN_MessengerID)
+
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+
+	return user.UserId
+}
+
 func read_bot_created_time(user_id string, session_id string, private_key string) time.Time {
 	botUser := mixin.NewUser(user_id, session_id, private_key, "")
 	profile, err := botUser.ReadProfile()
@@ -351,7 +372,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		var snaps []byte
 		var err error
 
-		snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, true, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+		snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, "ASC", req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
 
 		if err != nil {
 			in_progress_c <- Searchprogress{
@@ -492,7 +513,7 @@ func fire_callback_url(v CallbackRespone) {
 		log.Println(err)
 	}
 }
-func all_money_gomyhome(userid string, sessionid string, privatekey string, pin string, pintoken string) {
+func all_money_gomyhome(userid string, sessionid string, privatekey string, pin string, pintoken string, admin_uuid string) {
 	this_user := mixin.NewUser(userid, sessionid, privatekey, pin, pintoken)
 	balance, err := this_user.ReadAssets()
 	if err != nil {
@@ -513,7 +534,7 @@ func all_money_gomyhome(userid string, sessionid string, privatekey string, pin 
 			if v.Balance == "0" {
 				continue
 			} else {
-				trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Balance, v.Assetid, "allmoneygomyhome", uuid.Must(uuid.NewV4()).String())
+				trans_result, trans_err := this_user.Transfer(admin_uuid, v.Balance, v.Assetid, "allmoneygomyhome", uuid.Must(uuid.NewV4()).String())
 				if trans_err != nil {
 					log.Println(trans_err)
 				} else {
@@ -714,14 +735,29 @@ func main() {
 	db.AutoMigrate(&MixinAccountindb{})
 	db.AutoMigrate(&ClientReq{})
 	db.AutoMigrate(&DepositAddressindb{})
+	db.AutoMigrate(&MessengerUserindb{})
 
 	var user_config = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
 		private_key: private_key,
 	}
+
+	var admin_uuid_record MessengerUserindb
+	db.Find(&MessengerUserindb{Messengerid: ADMIN_MessengerID}).First(&admin_uuid_record)
+	if admin_uuid_record.ID == 0 {
+		result := read_useruuid_from(user_config.user_id, user_config.session_id, user_config.private_key, ADMIN_MessengerID)
+		if result != "" {
+			log.Println(result)
+			db.Create(&MessengerUserindb{Messengerid: ADMIN_MessengerID, Uuid: result})
+		} else {
+			log.Fatal("Failed to read admin uuid by it's messenger id")
+		}
+	}
+	db.Find(&MessengerUserindb{Messengerid: ADMIN_MessengerID}).First(&admin_uuid_record)
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
+
 	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
 	go user_interact(req_cmd_chan, single_direction_op_cmd_chan)
 
@@ -795,7 +831,7 @@ func main() {
 			var matched_account MixinAccountindb
 			db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
 			if matched_account.ID != 0 {
-				go all_money_gomyhome(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
+				go all_money_gomyhome(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken, admin_uuid_record.Uuid)
 				if matched_account.ClientReqid != 0 {
 					var matched_req ClientReq
 					db.First(&matched_req, matched_account.ClientReqid)
@@ -815,7 +851,6 @@ func main() {
 			}
 
 		case v := <-payment_received_asset_chan:
-			log.Println("The request id ", v.Reqid, " receive payment ", v.Callbackurl, v.Paymentrecord)
 			go fire_callback_url(v)
 		case <-quit_chan:
 			log.Println("finished")
@@ -879,7 +914,7 @@ func main() {
 				var allaccount []MixinAccountindb
 				db.Find(&allaccount)
 				for _, v := range allaccount {
-					go all_money_gomyhome(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken)
+					go all_money_gomyhome(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken, admin_uuid_record.Uuid)
 				}
 				v.Res_c <- fmt.Sprintf("total %d account will send all balance to admin", len(allaccount))
 			}
