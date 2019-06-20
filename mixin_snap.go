@@ -9,6 +9,7 @@ import (
 	"time"
 
 	mixin "github.com/MooooonStar/mixin-sdk-go/network"
+	"github.com/gofrs/uuid"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
@@ -32,7 +33,7 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
 
-	scan_interval_in_seconds = 20
+	scan_interval_in_seconds = 10
 )
 
 type Snapshot struct {
@@ -450,6 +451,52 @@ func user_interact(cmd_c chan PaymentReq, output_c chan string) {
 	log.Println("after web")
 }
 
+func all_money_gomyhome(userid string, sessionid string, privatekey string, pin string, pintoken string) {
+	this_user := mixin.NewUser(userid, sessionid, privatekey, pin, pintoken)
+	balance, err := this_user.ReadAssets()
+	if err != nil {
+		log.Println(err)
+		return
+	} else {
+		var resp BalanceResponse
+		err = json.Unmarshal(balance, &resp)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		if resp.Error != "" {
+			log.Println(resp.Error)
+			return
+		}
+		for _, v := range resp.Data {
+			log.Println(this_user.UserId, v.Assetid, v.Balance)
+			if v.Balance == "0" {
+				continue
+			} else {
+				trans_result, trans_err := this_user.Transfer(ADMIN_UUID, v.Balance, v.Assetid, "allmoneygomyhome", uuid.Must(uuid.NewV4()).String())
+				if trans_err != nil {
+					log.Println(trans_err)
+				} else {
+					var resp TransferNetRespone
+					err = json.Unmarshal(trans_result, &resp)
+
+					if err != nil {
+						log.Println(err)
+					} else {
+						if resp.TransferRes.Error != "" {
+							log.Println(resp.TransferRes.Error)
+						} else {
+							log.Println(resp.TransferRes.Data.Snapshotid)
+						}
+					}
+
+				}
+
+			}
+		}
+	}
+
+}
 func create_mixin_account(account_name string, predefine_pin string, user_id string, session_id string, private_key string, result_chan chan MixinAccountindb) {
 	user, err := mixin.CreateAppUser(account_name, predefine_pin, user_id, session_id, private_key)
 	if err != nil {
@@ -733,6 +780,7 @@ func main() {
 			var account MixinAccountindb
 			db.Find(&account, v.MixinAccountid)
 			log.Println("The request id ", v.ID, " receive payment ", v.Callbackurl, " in mixin account record id", v.MixinAccountid, " uuid ", account.Userid)
+			go all_money_gomyhome(account.Userid, account.Sessionid, account.Privatekey, account.Pin, account.Pintoken)
 		case <-quit_chan:
 			log.Println("finished")
 			return
