@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -53,7 +54,7 @@ type Snapshot struct {
 	Data            string `json:"data"`
 	Transactionhash string `json:"transaction_hash"`
 }
-type payment_records struct {
+type Payment_Record struct {
 	Amount     string
 	AssetId    string
 	CreatedAt  time.Time `json:"created_at"`
@@ -123,6 +124,11 @@ type ClientReq struct {
 	Callbackurl    string
 	MixinAccountid uint
 	Callbackfired  bool
+}
+type CallbackRespone struct {
+	Reqid         string
+	Callbackurl   string
+	Paymentrecord Payment_Record
 }
 
 type Searchtaskindb struct {
@@ -234,7 +240,7 @@ type PaymentMethod struct {
 type PaymentRes struct {
 	Reqid           string
 	Payment_methods []PaymentMethod
-	Payment_records []payment_records
+	Payment_records []Payment_Record
 	Balance         []Asset
 }
 
@@ -474,6 +480,17 @@ func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
 	log.Println("after web")
 }
 
+func fire_callback_url(v CallbackRespone) {
+	jsonValue, jserr := json.Marshal(v)
+	if jserr != nil {
+		return
+	}
+	localURL := "http://127.0.0.1" + v.Callbackurl
+	_, err := http.Post(localURL, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		log.Println(err)
+	}
+}
 func all_money_gomyhome(userid string, sessionid string, privatekey string, pin string, pintoken string) {
 	this_user := mixin.NewUser(userid, sessionid, privatekey, pin, pintoken)
 	balance, err := this_user.ReadAssets()
@@ -678,7 +695,7 @@ func main() {
 	var req_cmd_chan = make(chan PaymentReq, 2)
 	var single_direction_op_cmd_chan = make(chan OPReq, 2)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
-	var payment_received_asset_chan = make(chan ClientReq, 100)
+	var payment_received_asset_chan = make(chan CallbackRespone, 100)
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
 
@@ -777,18 +794,28 @@ func main() {
 			var matched_account MixinAccountindb
 			db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
 			if matched_account.ID != 0 {
+				go all_money_gomyhome(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken)
 				if matched_account.ClientReqid != 0 {
 					var matched_req ClientReq
 					db.First(&matched_req, matched_account.ClientReqid)
-					payment_received_asset_chan <- matched_req
+					if matched_req.ID != 0 {
+						var callback_response CallbackRespone
+						callback_response.Reqid = matched_req.Reqid
+						callback_response.Callbackurl = matched_req.Callbackurl
+						callback_response.Paymentrecord = Payment_Record{
+							CreatedAt:  v.CreatedAt,
+							Amount:     v.Amount,
+							AssetId:    v.AssetId,
+							SnapshotId: v.SnapshotId,
+						}
+						payment_received_asset_chan <- callback_response
+					}
 				}
 			}
 
 		case v := <-payment_received_asset_chan:
-			var account MixinAccountindb
-			db.Find(&account, v.MixinAccountid)
-			log.Println("The request id ", v.ID, " receive payment ", v.Callbackurl, " in mixin account record id", v.MixinAccountid, " uuid ", account.Userid)
-			go all_money_gomyhome(account.Userid, account.Sessionid, account.Privatekey, account.Pin, account.Pintoken)
+			log.Println("The request id ", v.Reqid, " receive payment ", v.Callbackurl, v.Paymentrecord)
+			go fire_callback_url(v)
 		case <-quit_chan:
 			log.Println("finished")
 			return
@@ -888,10 +915,10 @@ func main() {
 						res.Payment_methods = all_method
 
 						var all_payment_snapshots_indb []Snapshotindb
-						var all_payment_snapshots []payment_records
+						var all_payment_snapshots []Payment_Record
 						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots_indb)
 						for _, v := range all_payment_snapshots_indb {
-							this_snap := payment_records{
+							this_snap := Payment_Record{
 								Amount:     v.Amount,
 								AssetId:    v.AssetId,
 								CreatedAt:  v.SnapCreatedAt,
