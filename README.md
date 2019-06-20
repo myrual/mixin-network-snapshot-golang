@@ -9,7 +9,7 @@ Visit https://mixin.one/messenger to download App from AppStore, Google Play.
 ### 2. Active developer account and create an app
 Log in to https://developer.mixin.one with your mixin messenger account
 
-There is a [tutorial](https://mixin-network.gitbook.io/mixin-network/mixin-messenger-app/create-bot-account)
+This [tutorial](https://mixin-network.gitbook.io/mixin-network/mixin-messenger-app/create-bot-account) is very useful for new developer to create app.
 
 ### Clone, build, run
 ```shell
@@ -52,15 +52,17 @@ go build mixin_snap.go
 ## How to 
 #### Create payment request
 
-Create payment with request id value8, let the program visit http://127.0.0.1:9090/ with http POST 
+Make a unique string, and setup the callback url. The program will visit the callback URL if client pay to the deposit address
 
+Example:
 ```shell
 curl -d '{"reqid":"value8", "callback":":9090/"}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
 
-
 #### Get payment status
 fetch the payment status
+
+Example:
 ```shell
 curl -X GET 'http://localhost:8080/payment?reqid=value7'
 ```
@@ -79,7 +81,7 @@ The program will visit following url when user pay to payment address
 ```json
 "http://127.0.0.1"+callbackurl
 ```
-the method is POST, http body will be
+http method is POST, http body will be
 ```json
 {"Reqid":"value8","Callbackurl":":9090/","Paymentrecord":{"Amount":"0.01","AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1","created_at":"2019-06-20T07:33:06.445471337Z","snapshot_id":"a6603374-509b-4015-a192-c63bfa8def5f"}}
 ```
