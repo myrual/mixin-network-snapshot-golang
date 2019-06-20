@@ -31,6 +31,8 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
+
+	scan_interval_in_seconds = 20
 )
 
 type Snapshot struct {
@@ -38,16 +40,26 @@ type Snapshot struct {
 	Asset  struct {
 		AssetId string `json:"asset_id"`
 	} `json:"asset"`
+	AssetId    string    `json:"asset_id"`
 	CreatedAt  time.Time `json:"created_at"`
 	SnapshotId string    `json:"snapshot_id"`
 	Source     string    `json:"source"`
 	Type       string    `json:"type"`
 	//only available when http request include correct token
-	UserId     string `json:"user_id"`
-	TraceId    string `json:"trace_id"`
-	OpponentId string `json:"opponent_id"`
-	Data       string `json:"data"`
+	UserId          string `json:"user_id"`
+	TraceId         string `json:"trace_id"`
+	OpponentId      string `json:"opponent_id"`
+	Sender          string `json:"sender"`
+	Data            string `json:"data"`
+	Transactionhash string `json:"transaction_hash"`
 }
+type payment_records struct {
+	Amount     string
+	AssetId    string
+	CreatedAt  time.Time `json:"created_at"`
+	SnapshotId string    `json:"snapshot_id"`
+}
+
 type Profile struct {
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -218,7 +230,7 @@ type PaymentMethod struct {
 type PaymentRes struct {
 	Reqid           string
 	Payment_methods []PaymentMethod
-	Payment_records []Snapshotindb
+	Payment_records []payment_records
 	Balance         []Asset
 }
 
@@ -359,7 +371,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 			}
 			in_progress_c <- p
 			//nothing is searched, wait
-			time.Sleep(60 * time.Second)
+			time.Sleep(scan_interval_in_seconds * time.Second)
 			continue
 		} else {
 			last_element := resp.Data[len(resp.Data)-1]
@@ -371,7 +383,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 			p.search_task.ongoing = true
 			in_progress_c <- p
 			if len_of_snap < req_task.max_len {
-				time.Sleep(30 * time.Second)
+				time.Sleep(scan_interval_in_seconds * time.Second)
 			}
 		}
 	}
@@ -496,7 +508,13 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 			}
 			continue
 		}
+		var f interface{}
+		errjs := json.Unmarshal(snaps, &f)
+		if errjs != nil {
 
+		} else {
+			log.Println(f)
+		}
 		var resp MixinResponse
 		err = json.Unmarshal(snaps, &resp)
 
@@ -514,6 +532,7 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		for _, v := range resp.Data {
 			v.UserId = req_task.userid
 			in_result_chan <- v
+			log.Println(v)
 		}
 		if len_of_snap == 0 {
 			req_task.start_t = time.Now()
@@ -684,6 +703,9 @@ func main() {
 					Data:          v.Data,
 					OPType:        v.Type,
 				}
+				if v.AssetId != "" {
+					thisrecord.AssetId = v.AssetId
+				}
 				db.Create(&thisrecord)
 				f, err := strconv.ParseFloat(v.Amount, 64)
 				if err != nil {
@@ -693,6 +715,8 @@ func main() {
 						asset_received_snap_chan <- v
 					}
 				}
+			} else {
+				log.Println(v)
 			}
 		case v := <-asset_received_snap_chan:
 			var matched_account MixinAccountindb
@@ -800,8 +824,18 @@ func main() {
 
 						res.Payment_methods = all_method
 
-						var all_payment_snapshots []Snapshotindb
-						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots)
+						var all_payment_snapshots_indb []Snapshotindb
+						var all_payment_snapshots []payment_records
+						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots_indb)
+						for _, v := range all_payment_snapshots_indb {
+							this_snap := payment_records{
+								Amount:     v.Amount,
+								AssetId:    v.AssetId,
+								CreatedAt:  v.SnapCreatedAt,
+								SnapshotId: v.SnapshotId,
+							}
+							all_payment_snapshots = append(all_payment_snapshots, this_snap)
+						}
 						res.Payment_records = all_payment_snapshots
 						response_c <- res
 					} else {
