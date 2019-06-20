@@ -799,6 +799,10 @@ func main() {
 						}
 
 						res.Payment_methods = all_method
+
+						var all_payment_snapshots []Snapshotindb
+						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots)
+						res.Payment_records = all_payment_snapshots
 						response_c <- res
 					} else {
 						response_c <- res
