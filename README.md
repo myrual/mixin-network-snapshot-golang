@@ -37,6 +37,7 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
+	ADMIN_MessengerID = ""
 )
 ```
 3. Build
