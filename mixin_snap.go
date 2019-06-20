@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -32,8 +33,6 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
 6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
 -----END RSA PRIVATE KEY-----`
-
-	scan_interval_in_seconds = 10
 )
 
 type Snapshot struct {
@@ -222,6 +221,10 @@ type PaymentReq struct {
 	Callback string
 	Res_c    chan PaymentRes
 }
+type OPReq struct {
+	op_code string
+	Res_c   chan string
+}
 type PaymentMethod struct {
 	Name        string
 	PublicKey   string
@@ -254,9 +257,11 @@ const (
 	CNB_ASSET_ID  = "965e5c6e-434c-3fa9-b780-c50f43cd955c"
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
 
-	ADMIN_UUID     = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
-	PREDEFINE_PIN  = "198435"
-	PREDEFINE_NAME = "tom"
+	ADMIN_UUID               = "28ee416a-0eaa-4133-bc79-9676909b7b4e"
+	PREDEFINE_PIN            = "198435"
+	PREDEFINE_NAME           = "tom"
+	scan_interval_in_seconds = 10
+	op_all_money_go_home     = "allmoneygohome"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -440,13 +445,31 @@ func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Re
 		}
 	}
 }
+
+func moneyGoHomeHandle(input chan OPReq) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "POST":
+			response_c := make(chan string, 2)
+			input <- OPReq{
+				op_code: op_all_money_go_home,
+				Res_c:   response_c,
+			}
+			result := <-response_c
+			io.WriteString(w, result)
+		default:
+			io.WriteString(w, "Wrong!\n")
+		}
+	}
+}
 func paymentHandle(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func user_interact(cmd_c chan PaymentReq, output_c chan string) {
+func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
 
 	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
+	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 	log.Println("after web")
 }
@@ -654,7 +677,7 @@ func main() {
 	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 	var req_cmd_chan = make(chan PaymentReq, 2)
-	var user_output_chan = make(chan string, 100)
+	var single_direction_op_cmd_chan = make(chan OPReq, 2)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
 	var payment_received_asset_chan = make(chan ClientReq, 100)
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
@@ -683,7 +706,7 @@ func main() {
 	var ongoing_searchtasks_indb []Searchtaskindb
 	db.Find(&ongoing_searchtasks_indb)
 	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
-	go user_interact(req_cmd_chan, user_output_chan)
+	go user_interact(req_cmd_chan, single_direction_op_cmd_chan)
 
 	should_create_more_account_c <- 1
 	for {
@@ -823,7 +846,16 @@ func main() {
 					}
 				}
 			}
-
+		case v := <-single_direction_op_cmd_chan:
+			switch v.op_code {
+			case op_all_money_go_home:
+				var allaccount []MixinAccountindb
+				db.Find(&allaccount)
+				for _, v := range allaccount {
+					go all_money_gomyhome(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken)
+				}
+				v.Res_c <- fmt.Sprintf("total %d account will send all balance to admin", len(allaccount))
+			}
 		case v := <-req_cmd_chan:
 			if v.Method == "GET" {
 				log.Println("GET", v.Reqid)
