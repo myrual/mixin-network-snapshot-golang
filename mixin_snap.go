@@ -555,13 +555,6 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 			}
 			continue
 		}
-		var f interface{}
-		errjs := json.Unmarshal(snaps, &f)
-		if errjs != nil {
-
-		} else {
-			log.Println(f)
-		}
 		var resp MixinResponse
 		err = json.Unmarshal(snaps, &resp)
 
@@ -579,7 +572,6 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		for _, v := range resp.Data {
 			v.UserId = req_task.userid
 			in_result_chan <- v
-			log.Println(v)
 		}
 		if len_of_snap == 0 {
 			req_task.start_t = time.Now()
