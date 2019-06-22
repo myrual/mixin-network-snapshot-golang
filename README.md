@@ -50,6 +50,7 @@ go build mixin_snap.go
 ```
 
 5. Database
+
 A sqlite3 file with name test.db will be generated in same folder.
 
 ## How to 
