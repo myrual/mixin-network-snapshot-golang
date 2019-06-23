@@ -227,15 +227,17 @@ type Searchprogress struct {
 }
 
 type PaymentReqhttp struct {
-	Reqid    string `json:"reqid"`
-	Callback string `json:"callback"`
+	Reqid         string `json:"reqid"`
+	Callback      string `json:"callback"`
+	Expired_after uint32 `json:"expiredafter"`
 }
 
 type PaymentReq struct {
-	Method   string
-	Reqid    string
-	Callback string
-	Res_c    chan PaymentRes
+	Method        string
+	Reqid         string
+	Callback      string
+	Expired_after uint32
+	Res_c         chan PaymentRes
 }
 type OPReq struct {
 	op_code string
@@ -278,7 +280,7 @@ const (
 	PREDEFINE_NAME           = "tom"
 	scan_interval_in_seconds = 5
 	op_all_money_go_home     = "allmoneygohome"
-	scan_stop_after_n_hour   = 4
+	scan_stop_after_n_minutes = 240
 	local_web_port           = ":8080"
 )
 
@@ -457,9 +459,10 @@ func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Re
 			}
 			payment_res_c := make(chan PaymentRes, 1)
 			req := PaymentReq{
-				Reqid:    p.Reqid,
-				Callback: p.Callback,
-				Res_c:    payment_res_c,
+				Reqid:         p.Reqid,
+				Callback:      p.Callback,
+				Res_c:         payment_res_c,
+				Expired_after: p.Expired_after,
 			}
 			input <- req
 			v := <-payment_res_c
@@ -678,7 +681,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					task_expired_after: v.Taskexpired_at,
 				}
 				if v.Includesubaccount == false {
-					go search_userincome(v.Assetid, v.Userid, v.Sessionid, v.Privatekey, in_result_chan, in_progress_c, v.Endtime, time.Now(), time.Now().Add(time.Hour*scan_stop_after_n_hour))
+					go search_userincome(v.Assetid, v.Userid, v.Sessionid, v.Privatekey, in_result_chan, in_progress_c, v.Endtime, time.Now(), v.Taskexpired_at)
 				} else {
 					if v.Yesterday2today {
 						go read_snap_to_future(unfinished_req_task, in_result_chan, in_progress_c)
@@ -987,7 +990,7 @@ func main() {
 					db.Create(&new_req)
 					free_mixinaccount.ClientReqid = new_req.ID
 					db.Save(&free_mixinaccount)
-					go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Hour*4))
+					go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Duration(v.Expired_after)*time.Minute))
 					var payment_addresses []DepositAddressindb
 					db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
 					var all_method []PaymentMethod
