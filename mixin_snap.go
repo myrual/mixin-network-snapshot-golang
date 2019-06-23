@@ -586,10 +586,10 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 	}
 }
 
-func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, created_at time.Time, end_at time.Time, search_expired_after time.Time) {
+func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, use_created_at time.Time, end_at time.Time, search_expired_after time.Time) {
 	req_task := Searchtask{
 		start_t:            end_at,
-		end_t:              created_at,
+		end_t:              use_created_at,
 		max_len:            500,
 		yesterday2today:    false,
 		asset_id:           asset_id,
