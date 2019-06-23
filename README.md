@@ -56,11 +56,11 @@ A sqlite3 file with name test.db will be generated in same folder.
 ## How to 
 #### Create payment request
 
-Make a unique string, and setup the callback url. The program will visit the callback URL if client pay to the deposit address
+Make a unique string, and setup the callback url. The program will visit the callback URL if client pay to the deposit address. The callback will be expired if 60 mihutes if you give expiredafter 60, the callback will always work if you give it a ZERO
 
 Example:
 ```shell
-curl -d '{"reqid":"value8", "callback":":9090/"}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
+curl -d '{"reqid":"value8", "callback":":9090/", , "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
 the result from the curl is following, you can see the deposit address for EOS and XLM.
 ```json
