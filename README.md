@@ -60,7 +60,7 @@ Make a unique string, and setup the callback url. The program will visit the cal
 
 Example:
 ```shell
-curl -d '{"reqid":"value8", "callback":":9090/", , "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
+curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
 the result from the curl is following, you can see the deposit address for EOS and XLM.
 ```json
