@@ -75,6 +75,11 @@ type DepositAddressResonse struct {
 	AccountTag   string `json:"account_tag"`
 	IconURL      string `json:"icon_url"`
 	Confirmblock uint   `json:"confirmations"`
+	Symbol       string `json:"symbol"`
+	Name         string `json:"name"`
+	Chainid      string `json:"chain_id"`
+	Assetkey     string `json:"asset_key"`
+	Assetid      string `json:"asset_id"`
 }
 type DepositNetResponse struct {
 	Error         error
@@ -120,6 +125,16 @@ type DepositAddressindb struct {
 	Accounttag       string
 	Iconurl          string
 	Confirmblock     uint
+}
+
+type AssetInformationindb struct {
+	gorm.Model
+	Assetid   string
+	Chainid   string
+	Symbol    string
+	Name      string
+	Publickey string
+	Asssetkey string
 }
 
 type MessengerUserindb struct {
@@ -276,12 +291,12 @@ const (
 	XLM_ASSET_ID  = "56e63c06-b506-4ec5-885a-4a5ac17b83c1"
 	TRON_ASSET_ID = "25dabac5-056a-48ff-b9f9-f67395dc407c"
 
-	PREDEFINE_PIN            = "198435"
-	PREDEFINE_NAME           = "tom"
-	scan_interval_in_seconds = 5
-	op_all_money_go_home     = "allmoneygohome"
+	PREDEFINE_PIN             = "198435"
+	PREDEFINE_NAME            = "tom"
+	scan_interval_in_seconds  = 5
+	op_all_money_go_home      = "allmoneygohome"
 	scan_stop_after_n_minutes = 240
-	local_web_port           = ":8080"
+	local_web_port            = ":8080"
 )
 
 func read_asset_deposit_address(asset_id string, user_id string, session_id string, private_key string, deposit_c chan DepositNetResponse) {
@@ -725,7 +740,7 @@ func main() {
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
 	// to support more asset, just add them in the following array
-	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
+	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID, ETH_ASSET_ID}
 	timer1 := time.NewTimer(1 * time.Minute)
 
 	db, err := gorm.Open("sqlite3", "test.db")
@@ -739,6 +754,7 @@ func main() {
 	db.AutoMigrate(&MixinAccountindb{})
 	db.AutoMigrate(&ClientReq{})
 	db.AutoMigrate(&DepositAddressindb{})
+	db.AutoMigrate(&AssetInformationindb{})
 	db.AutoMigrate(&MessengerUserindb{})
 
 	var user_config = BotConfig{
@@ -885,6 +901,19 @@ func main() {
 					depositRecord.Confirmblock = asset_deposit_address_result.MixinResponse.Data.Confirmblock
 					depositRecord.Iconurl = asset_deposit_address_result.MixinResponse.Data.IconURL
 					db.Save(&depositRecord)
+
+					var asset_record AssetInformationindb
+					db.Where(&AssetInformationindb{Assetid: depositRecord.Assetid}).First(&asset_record)
+					if asset_record.ID == 0 {
+						//first found asset
+						asset_record.Symbol = asset_deposit_address_result.MixinResponse.Data.Symbol
+						asset_record.Name = asset_deposit_address_result.MixinResponse.Data.Name
+						asset_record.Asssetkey = asset_deposit_address_result.MixinResponse.Data.Assetkey
+						asset_record.Chainid = asset_deposit_address_result.MixinResponse.Data.Chainid
+						asset_record.Assetid = asset_deposit_address_result.Assetid
+						db.Create(&asset_record)
+						log.Println(asset_record)
+					}
 				}
 			}
 
@@ -939,12 +968,10 @@ func main() {
 						var all_method []PaymentMethod
 						for _, v := range payment_addresses {
 							var pv PaymentMethod
-							switch v.Assetid {
-							case EOS_ASSET_ID:
-								pv.Name = "EOS"
-							case XLM_ASSET_ID:
-								pv.Name = "XLM"
-							}
+							var asset_info AssetInformationindb
+							db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
+							log.Println(asset_info)
+							pv.Name = asset_info.Symbol
 							pv.PublicKey = v.Publicaddress
 							pv.AccountName = v.Accountname
 							pv.AccountTag = v.Accounttag
@@ -996,12 +1023,10 @@ func main() {
 					var all_method []PaymentMethod
 					for _, v := range payment_addresses {
 						var pv PaymentMethod
-						switch v.Assetid {
-						case EOS_ASSET_ID:
-							pv.Name = "EOS"
-						case XLM_ASSET_ID:
-							pv.Name = "XLM"
-						}
+						var asset_info AssetInformationindb
+						db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
+						log.Println(asset_info)
+						pv.Name = asset_info.Symbol
 						pv.PublicKey = v.Publicaddress
 						pv.AccountName = v.Accountname
 						pv.AccountTag = v.Accounttag
