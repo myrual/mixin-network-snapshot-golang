@@ -264,7 +264,7 @@ type PaymentReq struct {
 }
 type OPReq struct {
 	op_code string
-	Res_c   chan string
+	Res_c   chan []byte
 }
 type PaymentMethod struct {
 	Name        string
@@ -303,6 +303,7 @@ const (
 	PREDEFINE_NAME            = "tom"
 	scan_interval_in_seconds  = 5
 	op_all_money_go_home      = "allmoneygohome"
+	op_all_snaps              = "allsnaps"
 	scan_stop_after_n_minutes = 240
 	local_web_port            = ":8080"
 )
@@ -505,18 +506,36 @@ func moneyGoHomeHandle(input chan OPReq) func(http.ResponseWriter, *http.Request
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "POST":
-			response_c := make(chan string, 2)
+			response_c := make(chan []byte, 2)
 			input <- OPReq{
 				op_code: op_all_money_go_home,
 				Res_c:   response_c,
 			}
 			result := <-response_c
-			io.WriteString(w, result)
+			w.Write(result)
 		default:
 			io.WriteString(w, "Wrong!\n")
 		}
 	}
 }
+
+func allsnapsHandle(input chan OPReq) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			response_c := make(chan []byte, 2)
+			input <- OPReq{
+				op_code: op_all_snaps,
+				Res_c:   response_c,
+			}
+			result := <-response_c
+			w.Write(result)
+		default:
+			io.WriteString(w, "Wrong!\n")
+		}
+	}
+}
+
 func paymentHandle(w http.ResponseWriter, req *http.Request) {
 
 }
@@ -525,6 +544,7 @@ func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
 
 	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
+	http.HandleFunc("/snaps", allsnapsHandle(op_c))
 	log.Fatal(http.ListenAndServe(local_web_port, nil))
 	log.Println("after web")
 }
@@ -995,7 +1015,35 @@ func main() {
 				for _, v := range allaccount {
 					go all_money_gomyhome(v.Userid, v.Sessionid, v.Privatekey, v.Pin, v.Pintoken, admin_uuid_record.Uuid)
 				}
-				v.Res_c <- fmt.Sprintf("total %d account will send all balance to admin", len(allaccount))
+				type Message struct {
+					Action string
+					Result string
+				}
+				m := Message{"Allmoneygohome", fmt.Sprintf("total %d account will send all balance to admin", len(allaccount))}
+				b, _ := json.Marshal(m)
+				v.Res_c <- b
+			case op_all_snaps:
+				var allbot_snaps []Snapshotindb
+				db.Find(&allbot_snaps)
+				type Snap struct {
+					Snapshotid string
+					Createdat  time.Time
+					Amount     string
+					Assetid    string
+				}
+				type Message struct {
+					Action string
+					Result []Snap
+				}
+				var result []Snap
+				for _, v := range allbot_snaps {
+					this := Snap{v.SnapshotId, v.SnapCreatedAt, v.Amount, v.AssetId}
+					result = append(result, this)
+				}
+
+				m := Message{"Allsnap", result}
+				b, _ := json.Marshal(m)
+				v.Res_c <- b
 			}
 		case v := <-req_cmd_chan:
 			if v.Method == "GET" {
