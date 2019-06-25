@@ -164,10 +164,20 @@ type Searchtaskindb struct {
 	Assetid           string
 	Ongoing           bool
 	Userid            string
+	Includesubaccount bool
+	Taskexpired_at    time.Time
+}
+type Searchtaskinram struct {
+	Starttime         time.Time
+	Endtime           time.Time
+	Taskexpired_at    time.Time
+	Yesterday2today   bool
+	Assetid           string
+	Ongoing           bool
+	Userid            string
 	Sessionid         string
 	Privatekey        string
 	Includesubaccount bool
-	Taskexpired_at    time.Time
 }
 
 type BotConfig struct {
@@ -677,9 +687,9 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		}
 	}
 }
-func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_indb []Searchtaskindb) {
-	if len(searchtasks_array_indb) > 0 {
-		for _, v := range searchtasks_array_indb {
+func restore_searchsnap(bot_config BotConfig, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, default_asset_id_group []string, searchtasks_array_inram []Searchtaskinram) {
+	if len(searchtasks_array_inram) > 0 {
+		for _, v := range searchtasks_array_inram {
 			if v.Ongoing == true {
 				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Userid, v.Assetid)
 				unfinished_req_task := Searchtask{
@@ -708,7 +718,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 			}
 		}
 	} else {
-		botCreateAt := read_bot_created_time(user_config.user_id, user_config.session_id, user_config.private_key)
+		botCreateAt := read_bot_created_time(bot_config.user_id, bot_config.session_id, bot_config.private_key)
 		if botCreateAt.IsZero() {
 			panic("Read bot profile failed")
 		} else {
@@ -719,7 +729,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					max_len:           500,
 					yesterday2today:   false,
 					asset_id:          v,
-					userconfig:        user_config,
+					userconfig:        bot_config,
 					includesubaccount: true,
 				}
 				go read_snap_to_future(search_asset_task, in_result_chan, in_progress_c)
@@ -757,7 +767,7 @@ func main() {
 	db.AutoMigrate(&AssetInformationindb{})
 	db.AutoMigrate(&MessengerUserindb{})
 
-	var user_config = BotConfig{
+	var bot_config_instance = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
 		private_key: private_key,
@@ -767,7 +777,7 @@ func main() {
 	var admin_uuid_record MessengerUserindb
 	db.Find(&MessengerUserindb{Messengerid: ADMIN_MessengerID}).First(&admin_uuid_record)
 	if admin_uuid_record.ID == 0 {
-		result := read_useruuid_from(user_config.user_id, user_config.session_id, user_config.private_key, ADMIN_MessengerID)
+		result := read_useruuid_from(bot_config_instance.user_id, bot_config_instance.session_id, bot_config_instance.private_key, ADMIN_MessengerID)
 		if result != "" {
 			log.Println(result)
 			db.Create(&MessengerUserindb{Messengerid: ADMIN_MessengerID, Uuid: result})
@@ -777,9 +787,46 @@ func main() {
 	}
 	db.Find(&MessengerUserindb{Messengerid: ADMIN_MessengerID}).First(&admin_uuid_record)
 	var ongoing_searchtasks_indb []Searchtaskindb
+	var ongoing_searchtasks_inram []Searchtaskinram
 	db.Find(&ongoing_searchtasks_indb)
+	for _, v := range ongoing_searchtasks_indb {
+		var this_user_record MixinAccountindb
+		db.Where(&MixinAccountindb{Userid: v.Userid}).First(&this_user_record)
+		if this_user_record.ID != 0 {
+			var this_search_task_ram Searchtaskinram
+			this_search_task_ram.Starttime = v.Starttime
+			this_search_task_ram.Endtime = v.Endtime
+			this_search_task_ram.Taskexpired_at = v.Taskexpired_at
+			this_search_task_ram.Yesterday2today = v.Yesterday2today
+			this_search_task_ram.Assetid = v.Assetid
+			this_search_task_ram.Ongoing = v.Ongoing
 
-	restore_searchsnap(user_config, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_indb)
+			this_search_task_ram.Userid = v.Userid
+			this_search_task_ram.Sessionid = this_user_record.Sessionid
+			this_search_task_ram.Privatekey = this_user_record.Privatekey
+
+			this_search_task_ram.Includesubaccount = v.Includesubaccount
+
+			ongoing_searchtasks_inram = append(ongoing_searchtasks_inram, this_search_task_ram)
+		} else {
+			if v.Userid == bot_config_instance.user_id {
+				var this_search_task_ram Searchtaskinram
+				this_search_task_ram.Starttime = v.Starttime
+				this_search_task_ram.Endtime = v.Endtime
+				this_search_task_ram.Taskexpired_at = v.Taskexpired_at
+				this_search_task_ram.Yesterday2today = v.Yesterday2today
+				this_search_task_ram.Assetid = v.Assetid
+				this_search_task_ram.Ongoing = v.Ongoing
+				this_search_task_ram.Userid = v.Userid
+				this_search_task_ram.Sessionid = bot_config_instance.session_id
+				this_search_task_ram.Privatekey = bot_config_instance.private_key
+				this_search_task_ram.Includesubaccount = v.Includesubaccount
+				ongoing_searchtasks_inram = append(ongoing_searchtasks_inram, this_search_task_ram)
+			}
+		}
+	}
+
+	restore_searchsnap(bot_config_instance, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_inram)
 	go user_interact(req_cmd_chan, single_direction_op_cmd_chan)
 
 	should_create_more_account_c <- 1
@@ -806,8 +853,6 @@ func main() {
 					Assetid:           pv.search_task.asset_id,
 					Ongoing:           pv.search_task.ongoing,
 					Userid:            pv.search_task.userconfig.user_id,
-					Sessionid:         pv.search_task.userconfig.session_id,
-					Privatekey:        pv.search_task.userconfig.private_key,
 					Includesubaccount: pv.search_task.includesubaccount,
 					Taskexpired_at:    pv.search_task.task_expired_after,
 				}
@@ -927,7 +972,7 @@ func main() {
 			available_mixin_account := len(free_mixinaccounts)
 			if available_mixin_account < 10 {
 				for i := 20; i > available_mixin_account; i-- {
-					go create_mixin_account(PREDEFINE_NAME, PREDEFINE_PIN, user_config.user_id, user_config.session_id, user_config.private_key, new_account_received_chan)
+					go create_mixin_account(PREDEFINE_NAME, PREDEFINE_PIN, bot_config_instance.user_id, bot_config_instance.session_id, bot_config_instance.private_key, new_account_received_chan)
 				}
 			}
 
