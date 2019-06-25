@@ -225,15 +225,13 @@ type ProfileResponse struct {
 type Searchtask struct {
 	start_t            time.Time
 	end_t              time.Time
+	task_expired_after time.Time
 	yesterday2today    bool
 	max_len            int
 	asset_id           string
 	ongoing            bool
-	userid             string
-	sessionid          string
-	privatekey         string
+	userconfig         BotConfig
 	includesubaccount  bool
-	task_expired_after time.Time
 }
 
 type Searchprogress struct {
@@ -390,7 +388,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		var snaps []byte
 		var err error
 
-		snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, "ASC", req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+		snaps, err = mixin.NetworkSnapshots(req_task.asset_id, req_task.start_t, "ASC", req_task.max_len, req_task.userconfig.user_id, req_task.userconfig.session_id, req_task.userconfig.private_key)
 
 		if err != nil {
 			in_progress_c <- Searchprogress{
@@ -603,14 +601,16 @@ func create_mixin_account(account_name string, predefine_pin string, user_id str
 
 func search_userincome(asset_id string, userid string, sessionid string, privatekey string, in_result_chan chan *Snapshot, in_progress_c chan Searchprogress, use_created_at time.Time, end_at time.Time, search_expired_after time.Time) {
 	req_task := Searchtask{
-		start_t:            end_at,
-		end_t:              use_created_at,
-		max_len:            500,
-		yesterday2today:    false,
-		asset_id:           asset_id,
-		userid:             userid,
-		sessionid:          sessionid,
-		privatekey:         privatekey,
+		start_t:         end_at,
+		end_t:           use_created_at,
+		max_len:         500,
+		yesterday2today: false,
+		asset_id:        asset_id,
+		userconfig: BotConfig{
+			user_id:     userid,
+			session_id:  sessionid,
+			private_key: privatekey,
+		},
 		ongoing:            true,
 		includesubaccount:  false,
 		task_expired_after: search_expired_after,
@@ -627,7 +627,7 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		}
 		var snaps []byte
 		var err error
-		snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userid, req_task.sessionid, req_task.privatekey)
+		snaps, err = mixin.MyNetworkSnapshots(req_task.asset_id, req_task.start_t, req_task.max_len, req_task.userconfig.user_id, req_task.userconfig.session_id, req_task.userconfig.private_key)
 
 		if err != nil {
 			in_progress_c <- Searchprogress{
@@ -650,7 +650,7 @@ func search_userincome(asset_id string, userid string, sessionid string, private
 		}
 		len_of_snap := len(resp.Data)
 		for _, v := range resp.Data {
-			v.UserId = req_task.userid
+			v.UserId = req_task.userconfig.user_id
 			in_result_chan <- v
 		}
 		if len_of_snap == 0 {
@@ -683,15 +683,17 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 			if v.Ongoing == true {
 				log.Println(v.Ongoing, v.Starttime, v.Endtime, v.Userid, v.Assetid)
 				unfinished_req_task := Searchtask{
-					start_t:            v.Starttime,
-					end_t:              v.Endtime,
-					max_len:            500,
-					yesterday2today:    v.Yesterday2today,
-					asset_id:           v.Assetid,
-					ongoing:            v.Ongoing,
-					userid:             v.Userid,
-					sessionid:          v.Sessionid,
-					privatekey:         v.Privatekey,
+					start_t:         v.Starttime,
+					end_t:           v.Endtime,
+					max_len:         500,
+					yesterday2today: v.Yesterday2today,
+					asset_id:        v.Assetid,
+					ongoing:         v.Ongoing,
+					userconfig: BotConfig{
+						user_id:     v.Userid,
+						session_id:  v.Sessionid,
+						private_key: v.Privatekey,
+					},
 					includesubaccount:  v.Includesubaccount,
 					task_expired_after: v.Taskexpired_at,
 				}
@@ -717,9 +719,7 @@ func restore_searchsnap(user_config BotConfig, in_result_chan chan *Snapshot, in
 					max_len:           500,
 					yesterday2today:   false,
 					asset_id:          v,
-					userid:            user_config.user_id,
-					sessionid:         user_config.session_id,
-					privatekey:        user_config.private_key,
+					userconfig:        user_config,
 					includesubaccount: true,
 				}
 				go read_snap_to_future(search_asset_task, in_result_chan, in_progress_c)
@@ -763,6 +763,7 @@ func main() {
 		private_key: private_key,
 	}
 
+	//startup
 	var admin_uuid_record MessengerUserindb
 	db.Find(&MessengerUserindb{Messengerid: ADMIN_MessengerID}).First(&admin_uuid_record)
 	if admin_uuid_record.ID == 0 {
@@ -793,7 +794,7 @@ func main() {
 			query_task := Searchtaskindb{
 				Endtime:           pv.search_task.end_t,
 				Assetid:           pv.search_task.asset_id,
-				Userid:            pv.search_task.userid,
+				Userid:            pv.search_task.userconfig.user_id,
 				Includesubaccount: pv.search_task.includesubaccount,
 			}
 			db.Where(&query_task).First(&searchtaskindb)
@@ -804,9 +805,9 @@ func main() {
 					Yesterday2today:   pv.search_task.yesterday2today,
 					Assetid:           pv.search_task.asset_id,
 					Ongoing:           pv.search_task.ongoing,
-					Userid:            pv.search_task.userid,
-					Sessionid:         pv.search_task.sessionid,
-					Privatekey:        pv.search_task.privatekey,
+					Userid:            pv.search_task.userconfig.user_id,
+					Sessionid:         pv.search_task.userconfig.session_id,
+					Privatekey:        pv.search_task.userconfig.private_key,
 					Includesubaccount: pv.search_task.includesubaccount,
 					Taskexpired_at:    pv.search_task.task_expired_after,
 				}
