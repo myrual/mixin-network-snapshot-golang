@@ -64,19 +64,19 @@ curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content
 ```
 the result from the curl is following, you can see the deposit address for EOS and XLM.
 ```json
-{"Reqid":"value9","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}],"Payment_records":null,"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}],"Payment_records":null,"Balance":null}
 ```
 #### Get payment status
 fetch the payment status
 
 Example:
 ```shell
-curl -X GET 'http://localhost:8080/payment?reqid=value7'
+curl -X GET 'http://localhost:8080/payment?reqid=value8'
 ```
 
 Response will be similar to following if payment is not confirmed
 ```json
-{"Reqid":"value6","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"dfc6af4e022c3a11"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"d457cab41245ca0531f64947d1bb958a"}],"Payment_records":null,"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"dfc6af4e022c3a11"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"d457cab41245ca0531f64947d1bb958a"}],"Payment_records":null,"Balance":null}
 ```
 Response will be similar to following if payment is already confirmed
 ```json
