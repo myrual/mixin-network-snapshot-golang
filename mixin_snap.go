@@ -811,8 +811,7 @@ func main() {
 	db.Find(&ongoing_searchtasks_indb)
 	for _, v := range ongoing_searchtasks_indb {
 		var this_user_record MixinAccountindb
-		db.Where(&MixinAccountindb{Userid: v.Userid}).First(&this_user_record)
-		if this_user_record.ID != 0 {
+		if db.Where(&MixinAccountindb{Userid: v.Userid}).First(&this_user_record).RecordNotFound() == false {
 			var this_search_task_ram Searchtaskinram
 			this_search_task_ram.Starttime = v.Starttime
 			this_search_task_ram.Endtime = v.Endtime
@@ -864,8 +863,7 @@ func main() {
 				Userid:            pv.search_task.userconfig.user_id,
 				Includesubaccount: pv.search_task.includesubaccount,
 			}
-			db.Where(&query_task).First(&searchtaskindb)
-			if searchtaskindb.CreatedAt.IsZero() {
+			if db.Where(&query_task).First(&searchtaskindb).RecordNotFound() {
 				var this_record = Searchtaskindb{
 					Starttime:         pv.search_task.start_t,
 					Endtime:           pv.search_task.end_t,
@@ -915,8 +913,7 @@ func main() {
 			}
 		case v := <-asset_received_snap_chan:
 			var matched_account MixinAccountindb
-			db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account)
-			if matched_account.ID != 0 {
+			if db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account).RecordNotFound() == false {
 				go all_money_gomyhome(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken, admin_uuid_record.Uuid)
 				if matched_account.ClientReqid != 0 {
 					var matched_req ClientReq
@@ -969,8 +966,7 @@ func main() {
 					db.Save(&depositRecord)
 
 					var asset_record AssetInformationindb
-					db.Where(&AssetInformationindb{Assetid: depositRecord.Assetid}).First(&asset_record)
-					if asset_record.ID == 0 {
+					if db.Where(&AssetInformationindb{Assetid: depositRecord.Assetid}).First(&asset_record).RecordNotFound() {
 						//first found asset
 						asset_record.Symbol = asset_deposit_address_result.MixinResponse.Data.Symbol
 						asset_record.Name = asset_deposit_address_result.MixinResponse.Data.Name
@@ -1100,8 +1096,7 @@ func main() {
 				response_c := v.Res_c
 				var res PaymentRes
 				var free_mixinaccount MixinAccountindb
-				db.Where("client_reqid = ?", "0").First(&free_mixinaccount)
-				if free_mixinaccount.ID != 0 {
+				if db.Where("client_reqid = ?", "0").First(&free_mixinaccount).RecordNotFound() == false {
 					res.Reqid = v.Reqid
 					new_req := ClientReq{
 						Reqid:          unique_id,
