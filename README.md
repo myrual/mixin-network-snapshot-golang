@@ -1,6 +1,8 @@
 # Cryptocurrency payment plugin
 Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
 
+The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency. Cryptocurrency is automatically transferred to your account when your client paid.
+
 Steps:
 ### 1. Create a Mixin Messenger account.
 Visit https://mixin.one/messenger to download App from AppStore, Google Play.
@@ -56,27 +58,28 @@ A sqlite3 file with name test.db will be generated in same folder.
 
 
 ## How to 
-#### Create payment request
-Make a unique string, and setup the callback url. The program will visit the callback URL if client pay to the deposit address. The callback will be expired if 60 mihutes if you give expiredafter 60, the callback will always work if you give it a ZERO
+#### Accept cryptocurrency payment
+To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if you give it a ZERO.
 
-Example:
+Following curl is an example:
 ```shell
 curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
+The command just tell the program to create a payment address for an unique string "value8", visit localhost:9090/ when user paid in 60 minutes.
+
 the result of the command will be 
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
+Your client need value in Payment_methods. There three payment methods in the example.
 
-You need to show the content in Payment_methods to your client. 
-
-There are two types of payment:
-1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address
-2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo are required, transfer asset to PaymentAccount without memo is a common mistake, and can not be reverted.
+There are two types of payment method:
+1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address.
+2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation.
 
 
-#### Get payment status
-fetch the payment status by insert paramter in url
+#### Query payment status
+fetch the payment status by visit localhost:8080/payment with parameter reqid
 
 Example:
 ```shell
@@ -87,27 +90,32 @@ Response will be similar to following if payment is not yet confirmed
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
+The paymnet_records is empty here.
+
 Response will be similar to following if payment is already confirmed
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],"Balance":null}
 ```
+the payment_records are filled by transaction information.
 
 #### callback url 
-The program will visit following url when payment is confirmed by network
+The program will visit following url when payment is confirmed.
 ```json
 "http://127.0.0.1"+callbackurl
 ```
-The http visit method is POST, parameter is following
+The http visit method is POST, json body parameter is following
 ```json
 {"Reqid":"value8","Callbackurl":":9090/","Paymentrecord":{"Amount":"0.01","AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1","created_at":"2019-06-20T07:33:06.445471337Z","snapshot_id":"a6603374-509b-4015-a192-c63bfa8def5f"}}
 ```
 
 
-### Get all payment asset
-1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account.
-2. You can also manually send all money to your Mixin Messenger account
+### When income asset will be transferred to your account
+1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account. 
+2. You can also ask the program send all money to your Mixin Messenger account if the program exit accidently.
 ```shell
 curl -X POST -H "Content-Type: application/json" 127.0.0.1:8080/moneygohome
+
+3. It can be automatically transfer to your own wallet address(To be done)
 ```
 
 response will be similar to follow
@@ -115,17 +123,22 @@ response will be similar to follow
 total 20 account will send all balance to admin
 ```
 
-### Confirmation times
+### Cryptocurrency payment confirmation time
 1. EOS: 3 minutes
+2. Stellar: 2 minutes
+3. Bitcoin/USDT: 60 minutes
+4. Litecoin/Ethererum/DOGE: 120 minutes
 
-### Support cryptocurrency
-BTC, USDT, BCH, ETH and ERC20,ETC, EOS and token issue on, DASH, Litecoin, Doge,Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
+Why so long? Because it is Mixin Network confirmation time for different asset. You can not change it.
+
+### What kind of currency can be supported
+All Mixin Network asset:
+BTC, USDT, BCH, ETH and ERC20, ETC, EOS and token issue on EOS, DASH, Litecoin, Doge, Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
 
 ### Recommend Currency
-
 Default Crypty currency is EOS and XLM because transaction can be confirmed in 3 minutes.
 
-You can change the 	default_asset_id_group to support more ASSET.
+To support more currency, just add more asset into the default_asset_id_group.
 ```go
 const (
 	BTC_ASSET_ID  = "c6d0c728-2624-429b-8e0d-d9d19b6592fa"
@@ -154,8 +167,3 @@ const (
 	// to support more asset, just add them in the following array
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
 ```
-|Asset|estimate confirmation duration|
-|-|-|
-|TRON| 5 minutes|
-|BTC| 1 hour|
-|USDT Omni|  1 hour|
