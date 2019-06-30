@@ -175,3 +175,9 @@ const (
 	// to support more asset, just add them in the following array
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
 ```
+
+
+TO BE DONE:
+1. All asset can be withdrawed to developer's cold wallet.
+2. One type asset can be exchanged to USDT or Bitcoin automatically on DEX.
+3. Support Mixin Messenger User to pay.
