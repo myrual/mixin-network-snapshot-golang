@@ -1,5 +1,5 @@
-# A plugin enable web app accept crypto currency payment
-Web developer can accept cryptocurrency without pain.
+# Cryptocurrency payment plugin
+Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
 
 Steps:
 ### 1. Create a Mixin Messenger account.
