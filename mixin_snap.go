@@ -1075,13 +1075,21 @@ func main() {
 						var all_payment_snapshots []Payment_Record
 						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots_indb)
 						for _, v := range all_payment_snapshots_indb {
-							this_snap := Payment_Record{
-								Amount:     v.Amount,
-								AssetId:    v.AssetId,
-								CreatedAt:  v.SnapCreatedAt,
-								SnapshotId: v.SnapshotId,
+							f, err := strconv.ParseFloat(v.Amount, 64)
+							if err != nil {
+								log.Println(err)
+								continue
+							} else {
+								if f > 0 {
+									this_snap := Payment_Record{
+										Amount:     v.Amount,
+										AssetId:    v.AssetId,
+										CreatedAt:  v.SnapCreatedAt,
+										SnapshotId: v.SnapshotId,
+									}
+									all_payment_snapshots = append(all_payment_snapshots, this_snap)
+								}
 							}
-							all_payment_snapshots = append(all_payment_snapshots, this_snap)
 						}
 						res.Payment_records = all_payment_snapshots
 						response_c <- res
