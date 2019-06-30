@@ -115,28 +115,28 @@ The http visit method is POST, json body parameter is following
 ```shell
 curl -X POST -H "Content-Type: application/json" 127.0.0.1:8080/moneygohome
 
-3. It can be automatically transfer to your own wallet address(To be done)
 ```
 
 response will be similar to follow
 ```json
 total 20 account will send all balance to admin
 ```
+3. It can be automatically transfer to your own cold wallet address(To be done)
 
-### Cryptocurrency payment confirmation time
+### How long time to confirm user's payment
 1. EOS: 3 minutes
 2. Stellar: 2 minutes
 3. Bitcoin/USDT: 60 minutes
 4. Litecoin/Ethererum/DOGE: 120 minutes
 
-Why so long? Because it is Mixin Network confirmation time for different asset. You can not change it.
+Why so long? Because it is Mixin Network confirmation time for different asset. You can not change now.
 
 ### What kind of currency can be supported
-All Mixin Network asset:
+All asset supported by Mixin Network:
 BTC, USDT, BCH, ETH and ERC20, ETC, EOS and token issue on EOS, DASH, Litecoin, Doge, Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
 
 ### Recommend Currency
-Default Crypty currency is EOS and XLM because transaction can be confirmed in 3 minutes.
+Current default cryptocurrency is EOS and XLM because transaction can be confirmed in 3 minutes.
 
 To support more currency, just add more asset into the default_asset_id_group.
 ```go
