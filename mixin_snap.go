@@ -267,10 +267,10 @@ type OPReq struct {
 	Res_c   chan []byte
 }
 type PaymentMethod struct {
-	Name        string
-	PublicKey   string
-	AccountName string
-	AccountTag  string
+	Name           string
+	PaymentAddress string
+	PaymentAccount string
+	PaymentMemo    string
 }
 type PaymentRes struct {
 	Reqid           string
@@ -1062,9 +1062,9 @@ func main() {
 							db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
 							log.Println(asset_info)
 							pv.Name = asset_info.Symbol
-							pv.PublicKey = v.Publicaddress
-							pv.AccountName = v.Accountname
-							pv.AccountTag = v.Accounttag
+							pv.PaymentAddress = v.Publicaddress
+							pv.PaymentAccount = v.Accountname
+							pv.PaymentMemo = v.Accounttag
 
 							all_method = append(all_method, pv)
 						}
@@ -1124,9 +1124,9 @@ func main() {
 						db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
 						log.Println(asset_info)
 						pv.Name = asset_info.Symbol
-						pv.PublicKey = v.Publicaddress
-						pv.AccountName = v.Accountname
-						pv.AccountTag = v.Accounttag
+						pv.PaymentAddress = v.Publicaddress
+						pv.PaymentAccount = v.Accountname
+						pv.PaymentMemo = v.Accounttag
 
 						all_method = append(all_method, pv)
 					}

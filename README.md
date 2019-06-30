@@ -65,14 +65,14 @@ curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content
 ```
 the result of the command will be 
 ```json
-{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}, {"Name":"ETH","PublicKey":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","AccountName":"","AccountTag":""}],"Payment_records":null,"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
 
 You need to show the content in Payment_methods to your client. 
 
 There are two types of payment:
-1. Bitcoin/Ethereum style: PublicKey is not empty, AccountName and AccountTag are all empty. You show Ethererum Name and public address to your clients, they just need to transfer token to the address
-2. EOS/Stellar style: PublicKey is empty, AccountName and AccountName are not empty. You need to show Asset Name and both of AccountName and AccountTag to user, and remind user BOTH of AccountName and payment memo are required, transfer asset without memo is a common mistake, and can not be reverted.
+1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address
+2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo are required, transfer asset to PaymentAccount without memo is a common mistake, and can not be reverted.
 
 
 #### Get payment status
@@ -85,11 +85,11 @@ curl -X GET 'http://localhost:8080/payment?reqid=value8'
 
 Response will be similar to following if payment is not yet confirmed
 ```json
-{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"dfc6af4e022c3a11"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"d457cab41245ca0531f64947d1bb958a"}],"Payment_records":null,"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
 Response will be similar to following if payment is already confirmed
 ```json
-{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"62d0d256dcf15608"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7481cd36f77953f129c194d3444ae2ff"}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],"Balance":null}
 ```
 
 #### callback url 
