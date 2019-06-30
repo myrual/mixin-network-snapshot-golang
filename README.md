@@ -96,7 +96,16 @@ Response will be similar to following if payment is already confirmed
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],"Balance":null}
 ```
-the payment_records are filled by transaction information.
+the payment_records are filled by transaction information. one
+```json
+{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d",
+"created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"}
+```
+This is a payment from user: 
+* amount 0.01
+* asset id 6cfe566e-4aad-470b-8c9a-2fd35b49c68d, EOS main chain token
+* create at UTC 2019-06-20T02:37:05.870885973
+* unique snapshot id in Mixin Network is 6530f455-3238-491a-a9c5-bbcb52bcc306, you can verify the payment by https://mixin.one/snapshots/6530f455-3238-491a-a9c5-bbcb52bcc306
 
 #### callback url 
 The program will visit following url when payment is confirmed.
@@ -109,21 +118,20 @@ The http visit method is POST, json body parameter is following
 ```
 
 
-### When income asset will be transferred to your account
-1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account. 
+### Did all asset belongs to developer?
+1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account with ZERO transaction fee in 1 seconds. 
 2. You can also ask the program send all money to your Mixin Messenger account if the program exit accidently.
+
 ```shell
 curl -X POST -H "Content-Type: application/json" 127.0.0.1:8080/moneygohome
-
 ```
 
 response will be similar to follow
 ```json
 total 20 account will send all balance to admin
 ```
-3. It can be automatically transfer to your own cold wallet address(To be done)
 
-### How long time to confirm user's payment
+### payment confirmation time
 1. EOS: 3 minutes
 2. Stellar: 2 minutes
 3. Bitcoin/USDT: 60 minutes
