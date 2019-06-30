@@ -1,5 +1,6 @@
 # A plugin enable web app accept crypto currency payment
 Web developer can accept cryptocurrency without pain.
+
 Steps:
 ### 1. Create a Mixin Messenger account.
 Visit https://mixin.one/messenger to download App from AppStore, Google Play.
@@ -53,28 +54,36 @@ go build mixin_snap.go
 
 A sqlite3 file with name test.db will be generated in same folder.
 
+
 ## How to 
 #### Create payment request
-
 Make a unique string, and setup the callback url. The program will visit the callback URL if client pay to the deposit address. The callback will be expired if 60 mihutes if you give expiredafter 60, the callback will always work if you give it a ZERO
 
 Example:
 ```shell
 curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
-the result from the curl is following, you can see the deposit address for EOS and XLM.
+the result of the command will be 
 ```json
-{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}],"Payment_records":null,"Balance":null}
+{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"39819a44ac87dd2c"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"7648a59ae0eaee11d5d7f90c0f334eb1"}, {"Name":"ETH","PublicKey":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","AccountName":"","AccountTag":""}],"Payment_records":null,"Balance":null}
 ```
+
+You need to show the content in Payment_methods to your client. 
+
+There are two types of payment:
+1. Bitcoin/Ethereum style: PublicKey is not empty, AccountName and AccountTag are all empty. You show Ethererum Name and public address to your clients, they just need to transfer token to the address
+2. EOS/Stellar style: PublicKey is empty, AccountName and AccountName are not empty. You need to show Asset Name and both of AccountName and AccountTag to user, and remind user BOTH of AccountName and payment memo are required, transfer asset without memo is a common mistake, and can not be reverted.
+
+
 #### Get payment status
-fetch the payment status
+fetch the payment status by insert paramter in url
 
 Example:
 ```shell
 curl -X GET 'http://localhost:8080/payment?reqid=value8'
 ```
 
-Response will be similar to following if payment is not confirmed
+Response will be similar to following if payment is not yet confirmed
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PublicKey":"","AccountName":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","AccountTag":"dfc6af4e022c3a11"},{"Name":"EOS","PublicKey":"","AccountName":"eoswithmixin","AccountTag":"d457cab41245ca0531f64947d1bb958a"}],"Payment_records":null,"Balance":null}
 ```
@@ -84,11 +93,11 @@ Response will be similar to following if payment is already confirmed
 ```
 
 #### callback url 
-The program will visit following url when user pay to payment address
+The program will visit following url when payment is confirmed by network
 ```json
 "http://127.0.0.1"+callbackurl
 ```
-http method is POST, http body will be
+The http visit method is POST, parameter is following
 ```json
 {"Reqid":"value8","Callbackurl":":9090/","Paymentrecord":{"Amount":"0.01","AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1","created_at":"2019-06-20T07:33:06.445471337Z","snapshot_id":"a6603374-509b-4015-a192-c63bfa8def5f"}}
 ```
