@@ -1,4 +1,9 @@
+<p align="center">
+<a href="README_cn.md"><img src="https://img.shields.io/badge/language-中文文档-red.svg?longCache=true&style=flat-square"></a>
+</p>
+
 # Cryptocurrency payment plugin
+
 Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
 
 The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency. Cryptocurrency is automatically transferred to your account when your client paid.
