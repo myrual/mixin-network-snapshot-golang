@@ -2,7 +2,6 @@
 不需要了解比特币，EOS的全部API，不需要搭建全节点就可以接收数字货币付款.
 
 这个程序是一个全集成方案，开发者只需要通过http api就可以调用接口，把付款方式展示给消费者，程序会自动访问回掉URL。
-The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency. Cryptocurrency is automatically transferred to your account when your client paid.
 
 步骤:
 ### 1. 创建一个Mixin Messenger账户.
@@ -181,8 +180,8 @@ const (
 ```
 
 
-TO BE DONE:
-1. All asset can be withdrawed to developer's cold wallet.
-2. One type asset can be exchanged to USDT or Bitcoin automatically through DEX.
-3. Support Mixin Messenger User to pay.
-4. Latest USD price for every asset
+下一步的开发任务:
+1. 所有的资产可以自动提取到开发者自己的冷钱包，而不是只能转移到Mixin Messenger账户。
+2. 可以把收到的资产通过去中心化交易所自动转换成USDT或者比特币。
+3. 支持Mixin Messenger用户付款。
+4. 可以提供资产对应的美元价格。
