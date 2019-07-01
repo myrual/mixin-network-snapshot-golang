@@ -1,5 +1,5 @@
 <p align="center">
-<a href="README_cn.md"><img src="https://img.shields.io/badge/language-中文文档-red.svg?longCache=true&style=flat-square"></a>
+<a href="README_CN.md"><img src="https://img.shields.io/badge/language-中文文档-red.svg?longCache=true&style=flat-square"></a>
 </p>
 
 # Cryptocurrency payment plugin
