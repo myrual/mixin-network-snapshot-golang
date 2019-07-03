@@ -80,6 +80,8 @@ type DepositAddressResonse struct {
 	Chainid      string `json:"chain_id"`
 	Assetkey     string `json:"asset_key"`
 	Assetid      string `json:"asset_id"`
+	Priceusd     string `json:"price_usd"`
+	Pricebtc     string `json:"price_btc"`
 }
 type DepositNetResponse struct {
 	Error         error
@@ -143,6 +145,12 @@ type MessengerUserindb struct {
 	Uuid        string
 }
 
+type Assetpriceindb struct {
+	gorm.Model
+	Assetid    string `gorm:"primary_key"`
+	Priceinusd string
+	Priceinbtc string
+}
 type ClientReq struct {
 	gorm.Model
 	Reqid          string
@@ -271,6 +279,8 @@ type PaymentMethod struct {
 	PaymentAddress string
 	PaymentAccount string
 	PaymentMemo    string
+	Priceinusd     string
+	Priceinbtc     string
 }
 type PaymentRes struct {
 	Reqid           string
@@ -769,6 +779,7 @@ func main() {
 	var payment_received_asset_chan = make(chan CallbackRespone, 100)
 	var account_deposit_address_receive_chan = make(chan DepositNetResponse, 100)
 	var should_create_more_account_c = make(chan uint, 10)
+	var update_asset_price_c = make(chan uint, 10)
 	// to support more asset, just add them in the following array
 	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID, ETH_ASSET_ID}
 	timer1 := time.NewTimer(1 * time.Minute)
@@ -786,7 +797,7 @@ func main() {
 	db.AutoMigrate(&DepositAddressindb{})
 	db.AutoMigrate(&AssetInformationindb{})
 	db.AutoMigrate(&MessengerUserindb{})
-
+	db.AutoMigrate(&Assetpriceindb{})
 	var bot_config_instance = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
@@ -849,6 +860,7 @@ func main() {
 	go user_interact(req_cmd_chan, single_direction_op_cmd_chan)
 
 	should_create_more_account_c <- 1
+	update_asset_price_c <- 1
 	for {
 		select {
 		case pv := <-global_progress_c:
@@ -981,7 +993,43 @@ func main() {
 
 		case <-timer1.C:
 			should_create_more_account_c <- 1
+			update_asset_price_c <- 1
 
+		case <-update_asset_price_c:
+			for _, asset_id := range default_asset_id_group {
+				result, err := mixin.Deposit(asset_id, bot_config_instance.user_id, bot_config_instance.session_id, bot_config_instance.private_key)
+
+				if err != nil {
+					log.Fatal(err)
+					continue
+				}
+
+				var resp MixinDepositResponse
+				err = json.Unmarshal(result, &resp)
+
+				if err != nil {
+					log.Fatal(err)
+					continue
+				}
+				if resp.Error != "" {
+					log.Fatal(resp.Error)
+					continue
+				}
+				var this_asset_price Assetpriceindb
+				this_asset_price.Assetid = asset_id
+
+				if db.Where(&Assetpriceindb{Assetid: asset_id}).First(&this_asset_price).RecordNotFound() == true {
+					var new_asset_price Assetpriceindb
+					new_asset_price.Assetid = asset_id
+					new_asset_price.Priceinusd = resp.Data.Priceusd
+					new_asset_price.Priceinbtc = resp.Data.Pricebtc
+					db.Create(&new_asset_price)
+				} else {
+					this_asset_price.Priceinusd = resp.Data.Priceusd
+					this_asset_price.Priceinbtc = resp.Data.Pricebtc
+					db.Save(&this_asset_price)
+				}
+			}
 		case <-should_create_more_account_c:
 			var free_mixinaccounts []MixinAccountindb
 			db.Model(&MixinAccountindb{}).Where("client_reqid = ?", "0").Find(&free_mixinaccounts)
@@ -1065,6 +1113,12 @@ func main() {
 							pv.PaymentAddress = v.Publicaddress
 							pv.PaymentAccount = v.Accountname
 							pv.PaymentMemo = v.Accounttag
+
+							var asset_price_record Assetpriceindb
+							if db.Where(&Assetpriceindb{Assetid: v.Assetid}).First(&asset_price_record).RecordNotFound() == false {
+								pv.Priceinusd = asset_price_record.Priceinusd
+								pv.Priceinbtc = asset_price_record.Priceinbtc
+							}
 
 							all_method = append(all_method, pv)
 						}
