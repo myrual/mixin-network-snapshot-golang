@@ -1,23 +1,18 @@
-<p align="center">
-<a href="README_CN.md"><img src="https://img.shields.io/badge/language-中文文档-red.svg?longCache=true&style=flat-square"></a>
-</p>
+# 数字货币收款插件
+不需要了解比特币，EOS的全部API，不需要搭建全节点就可以接收数字货币付款.
 
-# Cryptocurrency payment plugin
+这个程序是一个全集成方案，开发者只需要通过http api就可以调用接口，把付款方式展示给消费者，程序会自动访问回掉URL。
 
-Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
-
-The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency. Cryptocurrency is automatically transferred to your account when your client paid.
-
-Steps:
-### 1. Create a Mixin Messenger account.
-Visit https://mixin.one/messenger to download App from AppStore, Google Play.
+步骤:
+### 1. 创建一个Mixin Messenger账户.
+访问 https://mixin.one/messenger 下载对应手机端App。
 
 中国大陆用户可以访问 https://a.app.qq.com/o/simple.jsp?pkgname=one.mixin.messenger  下载
 
-### 2. Active developer account and create an app
-Log in to https://developer.mixin.one with your mixin messenger account
+### 2. 激活开发者账号
+登陆 https://developer.mixin.one ，用App扫码登录
 
-This [tutorial](https://mixin-network.gitbook.io/mixin-network/mixin-messenger-app/create-bot-account) is very useful for new developer to create app.
+这个 [教程](https://mixin-network.gitbook.io/mixin-network/mixin-messenger-app/create-bot-account)对于新开发者很有用。
 
 ### Clone, build, run
 ```shell
@@ -25,7 +20,7 @@ git clone https://github.com/myrual/mixin-network-snapshot-golang
 cd mixin-network-snapshot-golang
 ```
 
-2. Edit some of code
+2. 编辑一部分配置信息
 ```go
 const (
 	userid      = "3c5fd587-5ac3-4fb6-b294-423ba3473f7d"
@@ -48,110 +43,113 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 	ADMIN_MessengerID = ""//this is your mixin messenger id, you can find your id in contact page.
 )
 ```
-3. Build
+3. 编译
 ```shell
 go build mixin_snap.go
 ```
-4. Run
+4. 运行
 ```shell
 ./mixin_snap
 ```
 
-5. Database
+5. 数据库
+同一目录下会生成一个test.db 的sqlite3文件。
 
-A sqlite3 file with name test.db will be generated in same folder.
 
-
-## How to 
-#### Accept cryptocurrency payment
-To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if you give it a ZERO.
-
-Following curl is an example:
+## 如何使用
+#### 如何接受数字货币付款
+为了接受比特币，EOS支付，开发者需要用http POST方法访问 localhost:8080/payment，参数放在body里面。 body里面应该有 唯一标示字符串，回掉URL，以及回掉过期时间。 唯一标示字符串可以是任意字符，uuid也可以。 程序收到用户的付款之后会用http post方法访问回掉本机Callback url。
+回掉机制有有效期，过了有效期，回掉机制会停止。如果回掉有效期参数为60， 那么回掉机制会在60分钟后过期。
+curl例子
 ```shell
 curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
 ```
-The command just tell the program to create a payment address for an unique string "value8", visit localhost:9090/ when user paid in 60 minutes.
+这条指令指示程序为value8创建一个支付地址，如果在60分钟内收到用户支付，那么程序会http post方式访问 localhost:9090/，同时带有参数。
 
-the result of the command will be 
+这条指令的返回结果是
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
-Your client need value in Payment_methods. There three payment methods in the example.
+Payment_methods里面的结果是给客户看的，这个例子有三个支付方法。
 
-There are two types of payment method:
-1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address.
-2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation.
+有两种风格的支付：
+1. 比特币/以太坊: PaymentAddress 不是空，PaymentAccount 和 PaymentMemo是空。这种情况下，你只需要给用户展示资产名字 以太坊和PaymentAddress，客户只需要向以太坊地址付款。
+2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。
 
 
-#### Query payment status
-fetch the payment status by visit localhost:8080/payment with parameter reqid
+#### 检查收款状态
+通过参数 reqid 访问 localhost:8080/payment 可以查询收款状态和记录。
 
-Example:
+例子:
 ```shell
 curl -X GET 'http://localhost:8080/payment?reqid=value8'
 ```
 
-Response will be similar to following if payment is not yet confirmed
+如果客户还没有支付，那么结果是这样的
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":null,"Balance":null}
 ```
-The paymnet_records is empty here.
+paymnet_records 是空
 
-Response will be similar to following if payment is already confirmed
+如果客户已经支付了，结果是这样的。
+
 ```json
 {"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":""}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],"Balance":null}
 ```
-the payment_records are filled by transaction information. one
+payment_records 有支付信息. 其中一个支付信息如下
 ```json
 {"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d",
 "created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"}
 ```
-This is a payment from user: 
-* amount 0.01
-* asset id 6cfe566e-4aad-470b-8c9a-2fd35b49c68d, EOS main chain token
-* create at UTC 2019-06-20T02:37:05.870885973
-* unique snapshot id in Mixin Network is 6530f455-3238-491a-a9c5-bbcb52bcc306, you can verify the payment by https://mixin.one/snapshots/6530f455-3238-491a-a9c5-bbcb52bcc306
+这是一条来自客户的支付: 
+* 数量 0.01
+* 资产id 6cfe566e-4aad-470b-8c9a-2fd35b49c68d，是 EOS 主网token
+* 支付生成于 UTC 2019-06-20T02:37:05.870885973
+* 该支付在Mixin Network内的唯一标示号 6530f455-3238-491a-a9c5-bbcb52bcc306，你可以在浏览器里面验证这笔交易 https://mixin.one/snapshots/6530f455-3238-491a-a9c5-bbcb52bcc306
 
-#### callback url 
-The program will visit following url when payment is confirmed.
+#### 回掉URL
+在有效期内收到用户付款，程序会访问本地的回掉URL。
 ```json
 "http://127.0.0.1"+callbackurl
 ```
-The http visit method is POST, json body parameter is following
+http访问方法是POST，参数在body里面，例子如下
 ```json
 {"Reqid":"value8","Callbackurl":":9090/","Paymentrecord":{"Amount":"0.01","AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1","created_at":"2019-06-20T07:33:06.445471337Z","snapshot_id":"a6603374-509b-4015-a192-c63bfa8def5f"}}
 ```
 
 
-### Did all asset belongs to developer?
-1. All income payment will be AUTOMATICALLY sent to your own Mixin Messenger account with ZERO transaction fee in 1 seconds. 
-2. You can also ask the program send all money to your Mixin Messenger account if the program exit accidently.
+### 所有资产都属于开发者自己么？
+1. 所有资产都会自动被转移到你指定的账户, 免手续费，1秒到账。
+2. 在该程序重启，或者意外退出之后，你可以手动发指令要求程序把所有资产都转移到你指定的账户。
 
+例子：
 ```shell
 curl -X POST -H "Content-Type: application/json" 127.0.0.1:8080/moneygohome
 ```
 
-response will be similar to follow
+结果如下
 ```json
 total 20 account will send all balance to admin
 ```
 
-### payment confirmation time
-1. EOS: 3 minutes
-2. Stellar: 2 minutes
-3. Bitcoin/USDT: 60 minutes
-4. Litecoin/Ethererum/DOGE: 120 minutes
+### 支付的确认时间
+1. EOS: 3 分钟
+2. Stellar: 2 分钟
+3. Bitcoin/USDT: 60 分钟
+4. Litecoin/Ethererum/DOGE: 120 分钟
 
-Why so long? Because it is Mixin Network confirmation time for different asset. You can not change now.
+什么是确认时间？大部分数字货币从用户发起转账请求，到收款方确认这笔付款不能回滚需要一点时间。
 
-### What kind of currency can be supported
-All asset supported by Mixin Network:
-BTC, USDT, BCH, ETH and ERC20, ETC, EOS and token issue on EOS, DASH, Litecoin, Doge, Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
+为什么这么长？这是Mixin Network 本身的设定，你现在改不了。
 
-### Recommend Currency
-Current default cryptocurrency is EOS and XLM because transaction can be confirmed in 3 minutes.
+### 支持哪些资产
+理论上Mixin Network支持的都可以接受。现在支持
+BTC, USDT, BCH, 以太坊和 ERC20, ETC, EOS 以及EOS上发的token, DASH, Litecoin, Doge, Horizen, MGD, NEM, XRP, XLM, 波场和波场上发的TRC10, Zcash. 
 
-To support more currency, just add more asset into the default_asset_id_group.
+### 目前的代码库默认支持的资产
+现在代码里面默认支持的资产是EOS和恒星，因为他们都可以3分钟完成支付确认。
+
+想要支持更多的币，把对应资产的变量放到 default_asset_id_group 里面就可以.
 ```go
 const (
 	BTC_ASSET_ID  = "c6d0c728-2624-429b-8e0d-d9d19b6592fa"
@@ -182,8 +180,8 @@ const (
 ```
 
 
-TO BE DONE:
-1. All asset can be withdrawed to developer's cold wallet.
-2. One type asset can be exchanged to USDT or Bitcoin automatically through DEX.
-3. Support Mixin Messenger User to pay.
-4. Latest USD price for every asset
+下一步的开发任务:
+1. 所有的资产可以自动提取到开发者自己的冷钱包，而不是只能转移到Mixin Messenger账户。
+2. 可以把收到的资产通过去中心化交易所自动转换成USDT或者比特币。
+3. 支持Mixin Messenger用户付款。
+4. 可以提供资产对应的美元价格。
