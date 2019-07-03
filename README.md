@@ -82,7 +82,11 @@ There are two types of payment method:
 1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address.
 2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation.
 
-The value for key "Priceinusd" and "Priceinbtc" is useful for web developer to calculate how many asset client should pay.
+Asset current price in USD and Bitcoin is inside payment record.
+```json
+{"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
+```
+
 
 #### Query payment status
 fetch the payment status by visit localhost:8080/payment with parameter reqid
