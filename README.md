@@ -191,4 +191,4 @@ TO BE DONE:
 1. All asset can be withdrawed to developer's cold wallet.
 2. One type asset can be exchanged to USDT or Bitcoin automatically through DEX.
 3. Support Mixin Messenger User to pay.
-4. ~~Latest USD price for every asset~~
+4. ~~Latest USD price for every asset~~ Implemented in commit 8a634e23254e4841c2a9c3114b3eb847d46f55fc
