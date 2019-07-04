@@ -162,6 +162,8 @@ type CallbackRespone struct {
 	Reqid         string
 	Callbackurl   string
 	Paymentrecord Payment_Record
+	Valueinusd    float64
+	Valueinbtc    float64
 }
 
 type Searchtaskindb struct {
@@ -941,6 +943,16 @@ func main() {
 							Amount:     v.Amount,
 							AssetId:    v.AssetId,
 							SnapshotId: v.SnapshotId,
+						}
+						var asset_price Assetpriceindb
+						if db.Where(&Assetpriceindb{Assetid: v.AssetId}).First(&asset_price).RecordNotFound() == false {
+							amount_float, _ := strconv.ParseFloat(v.Amount, 64)
+
+							float_price_usd, _ := strconv.ParseFloat(asset_price.Priceinusd, 64)
+							callback_response.Valueinusd = amount_float * float_price_usd
+
+							float_price_btc, _ := strconv.ParseFloat(asset_price.Priceinbtc, 64)
+							callback_response.Valueinbtc += amount_float * float_price_btc
 						}
 						payment_received_asset_chan <- callback_response
 					}
