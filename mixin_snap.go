@@ -131,12 +131,11 @@ type DepositAddressindb struct {
 
 type AssetInformationindb struct {
 	gorm.Model
-	Assetid   string
-	Chainid   string
-	Symbol    string
-	Name      string
-	Publickey string
-	Asssetkey string
+	Assetid  string
+	Chainid  string
+	Symbol   string
+	Name     string
+	Assetkey string
 }
 
 type MessengerUserindb struct {
@@ -996,11 +995,10 @@ func main() {
 						//first found asset
 						asset_record.Symbol = asset_deposit_address_result.MixinResponse.Data.Symbol
 						asset_record.Name = asset_deposit_address_result.MixinResponse.Data.Name
-						asset_record.Asssetkey = asset_deposit_address_result.MixinResponse.Data.Assetkey
+						asset_record.Assetkey = asset_deposit_address_result.MixinResponse.Data.Assetkey
 						asset_record.Chainid = asset_deposit_address_result.MixinResponse.Data.Chainid
 						asset_record.Assetid = asset_deposit_address_result.Assetid
 						db.Create(&asset_record)
-						log.Println(asset_record)
 					}
 				}
 			}
