@@ -287,6 +287,8 @@ type PaymentRes struct {
 	Payment_methods []PaymentMethod
 	Payment_records []Payment_Record
 	Balance         []Asset
+	ReceivedinUSD   float64
+	ReceivedinBTC   float64
 }
 
 const (
@@ -1127,6 +1129,8 @@ func main() {
 
 						var all_payment_snapshots_indb []Snapshotindb
 						var all_payment_snapshots []Payment_Record
+						var received_in_usd float64
+						var received_in_btc float64
 						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots_indb)
 						for _, v := range all_payment_snapshots_indb {
 							f, err := strconv.ParseFloat(v.Amount, 64)
@@ -1142,10 +1146,19 @@ func main() {
 										SnapshotId: v.SnapshotId,
 									}
 									all_payment_snapshots = append(all_payment_snapshots, this_snap)
+									var asset_price Assetpriceindb
+									if db.Where(&Assetpriceindb{Assetid: v.AssetId}).First(&asset_price).RecordNotFound() == false {
+										float_price_usd, _ := strconv.ParseFloat(asset_price.Priceinusd, 64)
+										received_in_usd += f * float_price_usd
+										float_price_btc, _ := strconv.ParseFloat(asset_price.Priceinbtc, 64)
+										received_in_btc += f * float_price_btc
+									}
 								}
 							}
 						}
 						res.Payment_records = all_payment_snapshots
+						res.ReceivedinUSD = received_in_usd
+						res.ReceivedinBTC = received_in_btc
 						response_c <- res
 					} else {
 						response_c <- res
