@@ -317,6 +317,7 @@ const (
 	scan_interval_in_seconds  = 5
 	op_all_money_go_home      = "allmoneygohome"
 	op_all_snaps              = "allsnaps"
+	assets_price              = "assetsprice"
 	scan_stop_after_n_minutes = 240
 	local_web_port            = ":8080"
 )
@@ -548,7 +549,22 @@ func allsnapsHandle(input chan OPReq) func(http.ResponseWriter, *http.Request) {
 		}
 	}
 }
-
+func assetspriceHandle(input chan OPReq) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			response_c := make(chan []byte, 2)
+			input <- OPReq{
+				op_code: assets_price,
+				Res_c:   response_c,
+			}
+			result := <-response_c
+			w.Write(result)
+		default:
+			io.WriteString(w, "Wrong!\n")
+		}
+	}
+}
 func paymentHandle(w http.ResponseWriter, req *http.Request) {
 
 }
@@ -558,6 +574,7 @@ func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
 	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
 	http.HandleFunc("/snaps", allsnapsHandle(op_c))
+	http.HandleFunc("/assetsprice", assetspriceHandle(op_c))
 	log.Fatal(http.ListenAndServe(local_web_port, nil))
 	log.Println("after web")
 }
@@ -1100,7 +1117,38 @@ func main() {
 				m := Message{"Allsnap", result}
 				b, _ := json.Marshal(m)
 				v.Res_c <- b
+			case assets_price:
+				type Assetprice2client struct {
+					Fullname string
+					Symbol   string
+					USDPrice float64
+					BTCPrice float64
+					Assetid  string
+				}
+
+				var asset_prices []Assetprice2client
+				for _, v := range default_asset_id_group {
+					var asset_info AssetInformationindb
+					if db.Where(&AssetInformationindb{Assetid: v}).First(&asset_info).RecordNotFound() == false {
+						var asset_price Assetpriceindb
+						if db.Where(&Assetpriceindb{Assetid: v}).First(&asset_price).RecordNotFound() == false {
+							usdprice, _ := strconv.ParseFloat(asset_price.Priceinusd, 64)
+							btcprice, _ := strconv.ParseFloat(asset_price.Priceinbtc, 64)
+							this := Assetprice2client{
+								Fullname: asset_info.Name,
+								Symbol:   asset_info.Symbol,
+								Assetid:  asset_info.Assetid,
+								USDPrice: usdprice,
+								BTCPrice: btcprice,
+							}
+							asset_prices = append(asset_prices, this)
+						}
+					}
+				}
+				b, _ := json.Marshal(asset_prices)
+				v.Res_c <- b
 			}
+
 		case v := <-req_cmd_chan:
 			if v.Method == "GET" {
 				payment_id := v.Reqid

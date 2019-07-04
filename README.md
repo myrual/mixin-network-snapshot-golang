@@ -63,6 +63,16 @@ A sqlite3 file with name test.db will be generated in same folder.
 
 
 ## How to 
+
+#### Query current cryptocurrency price
+```shell
+curl -X GET 'http://localhost:8080/assetsprice'
+```
+
+```json
+[{"Fullname":"Stellar","Symbol":"XLM","USDPrice":0.10357796,"BTCPrice":0.00000889,"Assetid":"56e63c06-b506-4ec5-885a-4a5ac17b83c1"},{"Fullname":"EOS","Symbol":"EOS","USDPrice":5.96024263,"BTCPrice":0.00051165,"Assetid":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d"},{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}]
+```
+
 #### Accept cryptocurrency payment
 To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if you give it a ZERO.
 
