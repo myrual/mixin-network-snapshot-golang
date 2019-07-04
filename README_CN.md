@@ -61,7 +61,7 @@ go build mixin_snap.go
 ```shell
 curl -X GET 'http://localhost:8080/assetsprice'
 ```
-
+价格结果如下
 ```json
 [{"Fullname":"Stellar","Symbol":"XLM","USDPrice":0.10357796,"BTCPrice":0.00000889,"Assetid":"56e63c06-b506-4ec5-885a-4a5ac17b83c1"},{"Fullname":"EOS","Symbol":"EOS","USDPrice":5.96024263,"BTCPrice":0.00051165,"Assetid":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d"},{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}]
 ```
