@@ -20,21 +20,21 @@ import (
 
 const (
 	userid      = "3c5fd587-5ac3-4fb6-b294-423ba3473f7d"
-	sessionid   = "42848ded-0ffd-45eb-9b46-094d5542ee01"
+	sessionid   = "82365995-4d86-4676-a632-4354f1a04954"
 	private_key = `-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQDACTrT4uaB9el9qe0MUOsFrm8kpaDI9PowauMB1Ha25mpfL+5h
-MFqISLS5z2P89nAsXBg+KyQ2gAVA6rBwW/ZqOc1PKiJhhLBS80nzo3ayfv7OlzNG
-IxMyqD5izCCtPixnqpuTePoPWq4CNZlxop0VYklsWEfU0U0qqMBgmtqYfQIDAQAB
-AoGAR8crZed5oTn5fC73m5LjRcxdXqVJ49MtcMuC7jwr41FckRepUkpwjGAgrRMH
-nJXAd9Q0e4hEkNppHEqciGLXR1dQfZnaM1Gnv7mD3oSgHaH+4qAMnNOCpvwW4Eu3
-yp9b1UGj9SvM3D2BrpA+MGf0E/yEJzpRcT956W6SPYYSegECQQDm4uTK+teoxr1Z
-agJZuCta+IhMzpxIWMob+JN/Huf7OnRcIa9JpXngg4tHOUWmZCDQdqeJMpaQc8SQ
-44hba015AkEA1OyJswNIhdmvVp5P1zgREVVRK6JloYwmAtj+Qo4pWJ117LqH4w+b
-491r4AeLEGh8VrZ4k6Hp+Cm783S2jTAWJQJARbWdlHdV45xVkQiDuyjy1h2RsXb0
-EpfUNcvAZLIlImIMvcBh1x+CA7pTs+Zj1BAJJEee37qJYQXDBGfeRJPKKQJAVG+c
-x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
-9LCfvNan/wqIngK0tQJBAL1Wc02seEbMeWyt5jycJEhn6G8F18s9S1v0GXb4U/7/
-6Y87P3TmDLcEuCXkrbZQaCX7jVLu0BkDw8To58TWjh0=	
+	MIICXgIBAAKBgQCIJJ+PfATaR3UDegG13fs0Rgx21+jpEB/aVOqrDNQUmuY5k/MC
+	GRicNeIa+J2gT6lzPfWDL8z5IABnlc6EgI4BKM1ok0UgeQy/DWvDAmik47vEMpjU
+	JjKwgwyarQA/yWl1R/9djt/cVOwxekOXJqNAjsfGzjArgUAzBZ3OYNr15wIDAQAB
+	AoGAL5kmVCMXCz3KcmG4sV4f0qHe/7nzC3EAwfPIa+87Qsz5Sw4n+wbNLOhF2gos
+	Cf1wEAOMj8YpkrwWiCC/KGJNwyGvCMWs166oA0KFPeMhpKMlqXE+DpNJQzit3mb1
+	nZf18MXSMHw2u8LFfMDjJb2QZTOMVvWjYKnVg1AchfcPbeECQQDtW26N9lMTlzXO
+	MxrtheenHuSEgm55wGRhKquxDpXbJNcalHAnIvfd5tGbuciMbVlEk01MF7ggEWID
+	IhSHXhvRAkEAktYRV2XetVvF13orMGMPag9akdCjCpnA8Yxn11S0HSGsM6nkrMKl
+	i7t+qDTjNUODsnOMzb34iJCNtaaHGL48NwJBAKiQ6Yfaaw+bsLObKcGL+oN+dg4B
+	T5IZ52/2TO62jAiRNk6DIs84j03BUhVFML9CHUaNUjT7F2F21uOgvXGRjTECQQCG
+	Uq2qddY1sa5aX7gCm5wOOd1wZpu/pseKMBcONL5Pp+4PlOtL3wPxv6Mt3LO8lfZz
+	2KCF1bL1usbn1V7gk6YhAkEAhegwxueVDfayjuOSX0yHKY6VAECELpCqpNy1YEon
+	9oKozCDe1Kg/ZLWGMP9cIayb/eyUjJeyUPP8dR2rfhFBkA==
 -----END RSA PRIVATE KEY-----`
 
 	ADMIN_MessengerID = "31367"
@@ -1253,7 +1253,13 @@ func main() {
 						pv.PaymentAccount = v.Accountname
 						pv.PaymentMemo = v.Accounttag
 
+						var asset_price Assetpriceindb
+						if db.Where(&Assetpriceindb{Assetid: v.Assetid}).First(&asset_price).RecordNotFound() == false {
+							pv.Priceinusd = asset_price.Priceinusd
+							pv.Priceinbtc = asset_price.Priceinbtc
+						}
 						all_method = append(all_method, pv)
+
 					}
 					res.Payment_methods = all_method
 				} else {
