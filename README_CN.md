@@ -63,7 +63,11 @@ curl -X GET 'http://localhost:8080/assetsprice'
 ```
 价格结果如下，其中Full Name是该币种全名，Symbol是在交易所和钱包的缩写符号，USDPrice是当前资产美元价格，BTCPrice同理。
 ```json
-[{"Fullname":"Stellar","Symbol":"XLM","USDPrice":0.10357796,"BTCPrice":0.00000889,"Assetid":"56e63c06-b506-4ec5-885a-4a5ac17b83c1"},{"Fullname":"EOS","Symbol":"EOS","USDPrice":5.96024263,"BTCPrice":0.00051165,"Assetid":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d"},{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}]
+[
+	{"Fullname":"Stellar","Symbol":"XLM","USDPrice":0.10357796,"BTCPrice":0.00000889,"Assetid":"56e63c06-b506-4ec5-885a-4a5ac17b83c1"},
+	{"Fullname":"EOS","Symbol":"EOS","USDPrice":5.96024263,"BTCPrice":0.00051165,"Assetid":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d"},
+	{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}
+]
 ```
 #### 如何接受数字货币付款
 为了接受比特币，EOS支付，开发者需要用http POST方法访问 localhost:8080/payment，参数放在body里面。 body里面应该有 唯一标示字符串，回掉URL，以及回掉过期时间。 唯一标示字符串可以是任意字符，uuid也可以。 程序收到用户的付款之后会用http post方法访问回掉本机Callback url。
@@ -76,9 +80,15 @@ curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content
 
 这条指令的返回结果是
 ```json
-{"Reqid":"value8","Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}],
+{"Reqid":"value8","Payment_methods":[
+	{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
+	{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
+	{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}],
 "Payment_records":null,
-"Balance":null,"ReceivedinUSD":0,"ReceivedinBTC":0}
+"Balance":null,
+"ReceivedinUSD":0,
+"ReceivedinBTC":0
+}
 ```
 Payment_methods里面的结果是给客户看的，这个例子有三个支付方法。
 
@@ -102,10 +112,15 @@ curl -X GET 'http://localhost:8080/payment?reqid=value8'
 如果客户还没有支付，那么结果是这样的
 ```json
 {"Reqid":"value8",
-"Payment_methods":[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}],
+"Payment_methods":[
+	{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
+	{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
+	{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}],
 "Payment_records":null,
 "Balance":null,
-"ReceivedUSD":0,"ReceivedBTC":0}
+"ReceivedUSD":0,
+"ReceivedBTC":0
+}
 ```
 paymnet_records 是空
 
@@ -113,14 +128,31 @@ paymnet_records 是空
 
 ```json
 {"Reqid":"value8",
-"Payment_methods":
-[{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}],"Payment_records":[{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}],
-"Balance":null,"ReceivedinUSD":0.605570253,"ReceivedinBTC":0.000052239}
+"Payment_methods":[
+	{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
+	{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
+	{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
+],
+"Payment_records":[
+	{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},
+	{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},
+	{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},
+	{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},
+	{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},
+	{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}
+],
+"Balance":null,
+"ReceivedinUSD":0.605570253,
+"ReceivedinBTC":0.000052239}
 ```
 payment_records 有支付信息. 其中一个支付信息如下
 ```json
-{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d",
-"created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"}
+{
+	"Amount":"0.01",
+	"AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d",
+	"created_at":"2019-06-20T02:37:05.870885973Z",
+	"snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306",
+}
 ```
 这是一条来自客户的支付: 
 * 数量 0.01
