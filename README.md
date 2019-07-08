@@ -91,7 +91,8 @@ The command just tell the program to create a payment address for an unique stri
 the result of the command will be 
 ```json
 {
-	"Reqid":"value8","Payment_methods":[
+	"Reqid":"value8",
+	"Payment_methods":[
 		{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
 		{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
 		{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
@@ -102,13 +103,14 @@ the result of the command will be
 	"ReceivedinBTC":0
 }
 ```
-Your client need value in Payment_methods. There three payment methods in the example.
+Your client need content in Payment_methods. There three payment methods in the example.
 
 There are two types of payment method:
 1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address.
 2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation.
 
-Asset current price in USD and Bitcoin is inside payment record.
+Asset current price in USD and Bitcoin is inside payment record, so developer can calculate how many asset client should transfer to the address.
+
 ```json
 {"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
 ```

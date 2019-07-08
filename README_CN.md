@@ -83,7 +83,8 @@ curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content
 这条指令的返回结果是
 ```json
 {
-	"Reqid":"value8","Payment_methods":[
+	"Reqid":"value8",
+	"Payment_methods":[
 		{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
 		{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
 		{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
@@ -100,7 +101,7 @@ Payment_methods里面的结果是给客户看的，这个例子有三个支付�
 1. 比特币/以太坊: PaymentAddress 不是空，PaymentAccount 和 PaymentMemo是空。这种情况下，你只需要给用户展示资产名字 以太坊和PaymentAddress，客户只需要向以太坊地址付款。
 2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。
 
-Payment_methods的记录内容里面有该资产当前的美元价格和比特币价格。
+Payment_methods的记录内容里面有该资产当前的美元价格和比特币价格，开发者可以根据订单的美元价格来计算客户应该转账多少数字货币。
 ```json
 {"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
 ```
