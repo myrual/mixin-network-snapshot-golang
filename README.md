@@ -64,7 +64,7 @@ A sqlite3 file with name test.db will be generated in same folder.
 
 ## How to 
 
-#### Query current cryptocurrency price
+#### Query current cryptocurrency price, so developer know how many asset client need to transfer.
 ```shell
 curl -X GET 'http://localhost:8080/assetsprice'
 ```
@@ -76,6 +76,8 @@ Result is following.
 	{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}
 ]
 ```
+
+If your order is valued about 1 USD, that means client need to deposit about 10 XLM, or 0.17 EOS.
 
 #### Accept cryptocurrency payment
 To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if you give it a ZERO.

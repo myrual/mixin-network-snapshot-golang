@@ -57,10 +57,11 @@ go build mixin_snap.go
 
 
 ## 如何使用
-#### 获取数字资产当前价格信息
+#### 获取数字资产当前价格信息，因此可以计算客户应该付多少数字资产
 ```shell
 curl -X GET 'http://localhost:8080/assetsprice'
 ```
+
 价格结果如下，其中Full Name是该币种全名，Symbol是在交易所和钱包的缩写符号，USDPrice是当前资产美元价格，BTCPrice同理。
 ```json
 [
@@ -69,6 +70,7 @@ curl -X GET 'http://localhost:8080/assetsprice'
 	{"Fullname":"Ether","Symbol":"ETH","USDPrice":294.61322131,"BTCPrice":0.02529107,"Assetid":"43d61dcd-e413-450d-80b8-101d5e903357"}
 ]
 ```
+如果订单价值1美金，那么根据资产价格可以知道客户需要 10 XLM, 或者 0.17 EOS。
 #### 如何接受数字货币付款
 为了接受比特币，EOS支付，开发者需要用http POST方法访问 localhost:8080/payment，参数放在body里面。 body里面应该有 唯一标示字符串，回掉URL，以及回掉过期时间。 唯一标示字符串可以是任意字符，uuid也可以。 程序收到用户的付款之后会用http post方法访问回掉本机Callback url。
 回掉机制有有效期，过了有效期，回掉机制会停止。如果回掉有效期参数为60， 那么回掉机制会在60分钟后过期。
