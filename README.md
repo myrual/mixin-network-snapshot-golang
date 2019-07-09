@@ -6,13 +6,11 @@
 
 Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
 
-The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency. Cryptocurrency is automatically transferred to your account when your client paid.
+The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency and cryptocurrency will be automatically transferred to your account.
 
 Steps:
 ### 1. Create a Mixin Messenger account.
 Visit https://mixin.one/messenger to download App from AppStore, Google Play.
-
-中国大陆用户可以访问 https://a.app.qq.com/o/simple.jsp?pkgname=one.mixin.messenger  下载
 
 ### 2. Active developer account and create an app
 Log in to https://developer.mixin.one with your mixin messenger account
@@ -48,6 +46,7 @@ x42Ew/eoTZwoIzvLoOkJcFlNHjwaksSER9ZiVQ7URdVOr99vvXQAJG45Wn9k12oy
 	ADMIN_MessengerID = ""//this is your mixin messenger id, you can find your id in contact page.
 )
 ```
+
 3. Build
 ```shell
 go build mixin_snap.go
@@ -80,7 +79,7 @@ Result is following.
 If your order is valued about 1 USD, that means client need to deposit about 10 XLM, or 0.17 EOS.
 
 #### Accept cryptocurrency payment
-To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if you give it a ZERO.
+To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if expiredafter is ZERO.
 
 Following curl is an example:
 ```shell
@@ -106,10 +105,10 @@ the result of the command will be
 Your client need content in Payment_methods. There three payment methods in the example.
 
 There are two types of payment method:
-1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address.
-2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation.
+1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address. In this example, show asset name ETH, payment address 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6 and payment amount to your client.
+2. EOS/Stellar style: PaymentAddress is empty, PaymentAccount and PaymentMemo are not empty. You need to show Asset Name and both of PaymentAccount and PaymentMemo to user, and remind user need to input BOTH of PaymentAccount and PaymentMemo. Transfer asset to PaymentAccount without memo is a common mistake, and it can not be reverted because current Mixin Network limitation. In this example, show asset name EOS, payment account eoswithmixin , payment memo 302c37ebff05ccf09dd7296053d1924a.
 
-Asset current price in USD and Bitcoin is inside payment record, so developer can calculate how many asset client should transfer to the address.
+Asset current price in USD and Bitcoin is inside payment record, so developer can calculate how many asset client should transfer to the address or account.
 
 ```json
 {"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}

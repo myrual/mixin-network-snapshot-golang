@@ -98,10 +98,10 @@ curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content
 Payment_methods里面的结果是给客户看的，这个例子有三个支付方法。
 
 有两种风格的支付：
-1. 比特币/以太坊: PaymentAddress 不是空，PaymentAccount 和 PaymentMemo是空。这种情况下，你只需要给用户展示资产名字 以太坊和PaymentAddress，客户只需要向以太坊地址付款。
-2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。
+1. 比特币/以太坊: PaymentAddress 不是空，PaymentAccount 和 PaymentMemo是空。这种情况下，你只需要给用户展示资产名字 以太坊和PaymentAddress，客户只需要向以太坊地址付款。在这个例子里面，向用户展示资产名称 ETH，以及收款地址 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6，以及你期望的以太坊数量。
+2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。在这个例子里面，向用户展示资产名称 EOS ， 收款账号 eoswithmixin 以及收款备注 302c37ebff05ccf09dd7296053d1924a，当然也包括你期望的资产数量。
 
-Payment_methods的记录内容里面有该资产当前的美元价格和比特币价格，开发者可以根据订单的美元价格来计算客户应该转账多少数字货币。
+Payment_methods的记录内容里面有该资产当前的美元价格和比特币价格，开发者可以根据订单的美元价格来计算客户应该支付多少数字货币。
 ```json
 {"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
 ```
