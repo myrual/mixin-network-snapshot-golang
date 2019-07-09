@@ -291,6 +291,32 @@ type PaymentRes struct {
 	ReceivedinUSD   float64
 	ReceivedinBTC   float64
 }
+type ChargeReqhttp struct {
+	Currency      string  `json:"currency"`
+	Amount        float32 `json:"amount"`
+	Customerid    string  `json:"customerid"`
+	Webhookurl    string  `json:"webhookurl"`
+	Expired_after uint32  `json:"expiredafter"`
+}
+type ChargeResponse struct {
+	Currency       string
+	Amount         float32
+	Customerid     string
+	Webhookurl     string
+	Expired_after  uint32
+	Receivedamount float64
+	Paidstatus     uint32
+}
+
+type ChargeReq struct {
+	Method        string
+	Currency      string
+	Amount        float32
+	Customerid    string
+	Webhookurl    string
+	Expired_after uint32
+	Res_c         chan ChargeResponse
+}
 
 const (
 	BTC_ASSET_ID  = "c6d0c728-2624-429b-8e0d-d9d19b6592fa"
@@ -515,7 +541,58 @@ func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Re
 		}
 	}
 }
-
+func makeChargeHandle(input chan ChargeReq) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			keys, ok := r.URL.Query()["customerid"]
+			if ok != true || len(keys[0]) < 1 {
+				io.WriteString(w, "Missing parameter customerid!\n")
+				return
+			}
+			charge_res_c := make(chan ChargeResponse, 1)
+			req := ChargeReq{
+				Method:     "GET",
+				Customerid: keys[0],
+				Res_c:      charge_res_c,
+			}
+			input <- req
+			v := <-charge_res_c
+			b, jserr := json.Marshal(v)
+			if jserr != nil {
+				log.Println(jserr)
+			} else {
+				w.Write(b)
+			}
+		case "POST":
+			d := json.NewDecoder(r.Body)
+			var p ChargeReqhttp
+			errjs := d.Decode(&p)
+			if errjs != nil {
+				http.Error(w, errjs.Error(), http.StatusInternalServerError)
+			}
+			charge_res_c := make(chan ChargeResponse, 1)
+			req := ChargeReq{
+				Currency:      p.Currency,
+				Amount:        p.Amount,
+				Customerid:    p.Customerid,
+				Webhookurl:    p.Webhookurl,
+				Expired_after: p.Expired_after,
+				Res_c:         charge_res_c,
+			}
+			input <- req
+			v := <-charge_res_c
+			b, jserr := json.Marshal(v)
+			if jserr != nil {
+				log.Println(jserr)
+			} else {
+				w.Write(b)
+			}
+		default:
+			io.WriteString(w, "Wrong!\n")
+		}
+	}
+}
 func moneyGoHomeHandle(input chan OPReq) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -569,9 +646,10 @@ func paymentHandle(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func user_interact(cmd_c chan PaymentReq, op_c chan OPReq) {
+func user_interact(cmd_c chan PaymentReq, op_c chan OPReq, charge_c chan ChargeReq) {
 
 	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
+	http.HandleFunc("/charges", makeChargeHandle(charge_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
 	http.HandleFunc("/snaps", allsnapsHandle(op_c))
 	http.HandleFunc("/assetsprice", assetspriceHandle(op_c))
@@ -794,6 +872,7 @@ func main() {
 	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
 	var req_cmd_chan = make(chan PaymentReq, 2)
+	var charge_cmd_chan = make(chan ChargeReq, 2)
 	var single_direction_op_cmd_chan = make(chan OPReq, 2)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
 	var payment_received_asset_chan = make(chan CallbackRespone, 100)
@@ -877,7 +956,7 @@ func main() {
 	}
 
 	restore_searchsnap(bot_config_instance, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_inram)
-	go user_interact(req_cmd_chan, single_direction_op_cmd_chan)
+	go user_interact(req_cmd_chan, single_direction_op_cmd_chan, charge_cmd_chan)
 
 	should_create_more_account_c <- 1
 	update_asset_price_c <- 1
@@ -1149,6 +1228,28 @@ func main() {
 				v.Res_c <- b
 			}
 
+		case v := <-charge_cmd_chan:
+			if v.Method == "GET" {
+				var resp ChargeResponse
+				resp.Currency = v.Currency
+				resp.Amount = v.Amount
+				resp.Customerid = v.Customerid
+				resp.Expired_after = v.Expired_after
+				resp.Paidstatus = 0
+				resp.Receivedamount = 0
+				resp.Webhookurl = v.Webhookurl
+				v.Res_c <- resp
+			} else {
+				var resp ChargeResponse
+				resp.Currency = v.Currency
+				resp.Amount = v.Amount
+				resp.Customerid = v.Customerid
+				resp.Expired_after = v.Expired_after
+				resp.Paidstatus = 0
+				resp.Receivedamount = 0
+				resp.Webhookurl = v.Webhookurl
+				v.Res_c <- resp
+			}
 		case v := <-req_cmd_chan:
 			if v.Method == "GET" {
 				payment_id := v.Reqid
