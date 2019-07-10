@@ -293,17 +293,18 @@ type PaymentRes struct {
 }
 type ChargeReqhttp struct {
 	Currency      string  `json:"currency"`
-	Amount        float32 `json:"amount"`
+	Amount        float64 `json:"amount"`
 	Customerid    string  `json:"customerid"`
 	Webhookurl    string  `json:"webhookurl"`
 	Expired_after uint32  `json:"expiredafter"`
 }
 type ChargeResponse struct {
 	Currency       string
-	Amount         float32
+	Amount         float64
 	Customerid     string
 	Webhookurl     string
 	Expired_after  uint32
+	Paymentmethod  PaymentMethod
 	Receivedamount float64
 	Paidstatus     uint32
 }
@@ -311,11 +312,25 @@ type ChargeResponse struct {
 type ChargeReq struct {
 	Method        string
 	Currency      string
-	Amount        float32
+	Amount        float64
 	Customerid    string
 	Webhookurl    string
 	Expired_after uint32
 	Res_c         chan ChargeResponse
+}
+type ChargeRecordindb struct {
+	gorm.Model
+	Currency       string
+	Amount         float64
+	Customerid     string
+	Webhookurl     string
+	Expiredafter   uint32
+	MixinAccountid uint
+}
+type ChargeRelationWithMixinAccountindb struct {
+	gorm.Model
+	Chargerecordid uint
+	Mixinaccountid uint
 }
 
 const (
@@ -897,6 +912,7 @@ func main() {
 	db.AutoMigrate(&AssetInformationindb{})
 	db.AutoMigrate(&MessengerUserindb{})
 	db.AutoMigrate(&Assetpriceindb{})
+	db.AutoMigrate(&ChargeRecordindb{})
 	var bot_config_instance = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
@@ -1230,15 +1246,69 @@ func main() {
 
 		case v := <-charge_cmd_chan:
 			if v.Method == "GET" {
-				var resp ChargeResponse
-				resp.Currency = v.Currency
-				resp.Amount = v.Amount
-				resp.Customerid = v.Customerid
-				resp.Expired_after = v.Expired_after
-				resp.Paidstatus = 0
-				resp.Receivedamount = 0
-				resp.Webhookurl = v.Webhookurl
-				v.Res_c <- resp
+				var charge_record ChargeRecordindb
+				if db.Where(&ChargeRecordindb{Customerid: v.Customerid}).First(&charge_record).RecordNotFound() == false {
+					var resp ChargeResponse
+					resp.Currency = charge_record.Currency
+					resp.Amount = charge_record.Amount
+					resp.Customerid = charge_record.Customerid
+					resp.Expired_after = charge_record.Expiredafter
+
+					//looking for currency asset id from SYMBOL
+					var currentcy_asset_info AssetInformationindb
+					if db.Where(&AssetInformationindb{Symbol: charge_record.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
+						var charge_mixinaccount_relation ChargeRelationWithMixinAccountindb
+						if db.Where(&ChargeRelationWithMixinAccountindb{Chargerecordid: charge_record.ID}).First(&charge_mixinaccount_relation).RecordNotFound() == false {
+							//find relation record with mixin account
+							var mixin_account MixinAccountindb
+
+							db.Find(&mixin_account, charge_mixinaccount_relation.Mixinaccountid)
+							if mixin_account.ID != 0 {
+								var payment_address DepositAddressindb
+								//find the currency payment address, this is a deposit address for crypto asset, different with lightning charge invoice
+								if db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID, Assetid: currentcy_asset_info.Assetid}).First(&payment_address).RecordNotFound() == false {
+									resp.Paymentmethod = PaymentMethod{
+										Name:           currentcy_asset_info.Symbol,
+										PaymentAddress: payment_address.Publicaddress,
+										PaymentAccount: payment_address.Accountname,
+										PaymentMemo:    payment_address.Accounttag,
+									}
+								}
+
+								//fill market price
+								var asset_price_record Assetpriceindb
+								if db.Where(&Assetpriceindb{Assetid: currentcy_asset_info.Assetid}).First(&asset_price_record).RecordNotFound() == false {
+									resp.Paymentmethod.Priceinusd = asset_price_record.Priceinusd
+									resp.Paymentmethod.Priceinbtc = asset_price_record.Priceinbtc
+								}
+
+								resp.Paidstatus = 0
+								resp.Receivedamount = 0
+								var all_assets_payment_snapshots_indb []Snapshotindb
+								db.Where(&Snapshotindb{UserId: mixin_account.Userid, AssetId: currentcy_asset_info.Assetid}).Find(&all_assets_payment_snapshots_indb)
+								for _, v := range all_assets_payment_snapshots_indb {
+									f, err := strconv.ParseFloat(v.Amount, 64)
+									if err != nil {
+										log.Fatal(err)
+										continue
+									} else {
+										if f > 0 {
+											resp.Receivedamount += f
+										}
+									}
+								}
+
+								if resp.Receivedamount >= resp.Amount {
+									resp.Paidstatus = 2
+								} else if resp.Receivedamount > 0 {
+									resp.Paidstatus = 1
+								}
+							}
+						}
+					}
+					resp.Webhookurl = v.Webhookurl
+					v.Res_c <- resp
+				}
 			} else {
 				var resp ChargeResponse
 				resp.Currency = v.Currency
