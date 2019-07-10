@@ -562,16 +562,16 @@ func makeChargeHandle(input chan ChargeReq) func(http.ResponseWriter, *http.Requ
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			keys, ok := r.URL.Query()["customerid"]
+			keys, ok := r.URL.Query()["charge_id"]
 			if ok != true || len(keys[0]) < 1 {
 				io.WriteString(w, "Missing parameter customerid!\n")
 				return
 			}
 			charge_res_c := make(chan ChargeResponse, 1)
 			req := ChargeReq{
-				Method:     "GET",
-				Customerid: keys[0],
-				Res_c:      charge_res_c,
+				Method: "GET",
+				Id:     keys[0],
+				Res_c:  charge_res_c,
 			}
 			input <- req
 			v := <-charge_res_c
@@ -1252,7 +1252,12 @@ func main() {
 			if v.Method == "GET" {
 				var charge_record ChargeRecordindb
 				var resp ChargeResponse
-				if db.Where(&ChargeRecordindb{Customerid: v.Customerid}).First(&charge_record).RecordNotFound() == false {
+				charge_record_id, _ := strconv.ParseUint(v.Id, 10, 32)
+				db.Find(&charge_record, charge_record_id)
+				log.Println(v)
+				if charge_record.ID != 0 {
+					log.Println(charge_record)
+					resp.Id = charge_record.ID
 					resp.Currency = charge_record.Currency
 					resp.Amount = charge_record.Amount
 					resp.Customerid = charge_record.Customerid
@@ -1261,65 +1266,60 @@ func main() {
 					//looking for currency asset id from SYMBOL
 					var currentcy_asset_info AssetInformationindb
 					if db.Where(&AssetInformationindb{Symbol: charge_record.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
-						var charge_mixinaccount_relation ChargeRelationWithMixinAccountindb
-						if db.Where(&ChargeRelationWithMixinAccountindb{Chargerecordid: charge_record.ID}).First(&charge_mixinaccount_relation).RecordNotFound() == false {
-							//find relation record with mixin account
-							var mixin_account MixinAccountindb
-							db.Find(&mixin_account, charge_mixinaccount_relation.Mixinaccountid)
-							if mixin_account.ID != 0 {
-								var payment_address DepositAddressindb
-								//find the currency payment address, this is a deposit address for crypto asset, different with lightning charge invoice
-								if db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID, Assetid: currentcy_asset_info.Assetid}).First(&payment_address).RecordNotFound() == false {
-									resp.Paymentmethod = PaymentMethod{
-										Name:           currentcy_asset_info.Symbol,
-										PaymentAddress: payment_address.Publicaddress,
-										PaymentAccount: payment_address.Accountname,
-										PaymentMemo:    payment_address.Accounttag,
+						var mixin_account MixinAccountindb
+
+						if db.Where(&MixinAccountindb{ClientReqid: charge_record.ID}).First(&mixin_account).RecordNotFound() == false {
+							var payment_address DepositAddressindb
+							//find the currency payment address, this is a deposit address for crypto asset, different with lightning charge invoice
+							if db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID, Assetid: currentcy_asset_info.Assetid}).First(&payment_address).RecordNotFound() == false {
+								resp.Paymentmethod = PaymentMethod{
+									Name:           currentcy_asset_info.Symbol,
+									PaymentAddress: payment_address.Publicaddress,
+									PaymentAccount: payment_address.Accountname,
+									PaymentMemo:    payment_address.Accounttag,
+								}
+							}
+
+							//fill market price
+							var asset_price_record Assetpriceindb
+							if db.Where(&Assetpriceindb{Assetid: currentcy_asset_info.Assetid}).First(&asset_price_record).RecordNotFound() == false {
+								resp.Paymentmethod.Priceinusd = asset_price_record.Priceinusd
+								resp.Paymentmethod.Priceinbtc = asset_price_record.Priceinbtc
+							}
+
+							resp.Paidstatus = 0
+							resp.Receivedamount = 0
+							var all_assets_payment_snapshots_indb []Snapshotindb
+							db.Where(&Snapshotindb{UserId: mixin_account.Userid, AssetId: currentcy_asset_info.Assetid}).Find(&all_assets_payment_snapshots_indb)
+							for _, v := range all_assets_payment_snapshots_indb {
+								f, err := strconv.ParseFloat(v.Amount, 64)
+								if err != nil {
+									log.Fatal(err)
+									continue
+								} else {
+									if f > 0 {
+										resp.Receivedamount += f
 									}
 								}
+							}
 
-								//fill market price
-								var asset_price_record Assetpriceindb
-								if db.Where(&Assetpriceindb{Assetid: currentcy_asset_info.Assetid}).First(&asset_price_record).RecordNotFound() == false {
-									resp.Paymentmethod.Priceinusd = asset_price_record.Priceinusd
-									resp.Paymentmethod.Priceinbtc = asset_price_record.Priceinbtc
-								}
-
-								resp.Paidstatus = 0
-								resp.Receivedamount = 0
-								var all_assets_payment_snapshots_indb []Snapshotindb
-								db.Where(&Snapshotindb{UserId: mixin_account.Userid, AssetId: currentcy_asset_info.Assetid}).Find(&all_assets_payment_snapshots_indb)
-								for _, v := range all_assets_payment_snapshots_indb {
-									f, err := strconv.ParseFloat(v.Amount, 64)
-									if err != nil {
-										log.Fatal(err)
-										continue
-									} else {
-										if f > 0 {
-											resp.Receivedamount += f
-										}
-									}
-								}
-
-								if resp.Receivedamount >= resp.Amount {
-									resp.Paidstatus = 2
-								} else if resp.Receivedamount > 0 {
-									resp.Paidstatus = 1
-								}
+							if resp.Receivedamount >= resp.Amount {
+								resp.Paidstatus = 2
+							} else if resp.Receivedamount > 0 {
+								resp.Paidstatus = 1
 							}
 						}
 					}
 					resp.Webhookurl = v.Webhookurl
-
 				}
 				v.Res_c <- resp
 			} else {
 				var resp ChargeResponse
-				var charge_record ChargeRecordindb
 				var currentcy_asset_info AssetInformationindb
-
+				log.Println(v.Currency)
 				//understand currency symbol
-				if db.Where(&AssetInformationindb{Symbol: charge_record.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
+				if db.Where(&AssetInformationindb{Symbol: v.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
+					log.Println(currentcy_asset_info)
 					var new_charge ChargeRecordindb
 					new_charge.Currency = v.Currency
 					new_charge.Amount = v.Amount
