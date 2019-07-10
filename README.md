@@ -8,6 +8,8 @@ Web developer can accept cryptocurrency without understand Bitcoin, EOS full API
 
 The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency and cryptocurrency will be automatically transferred to your account.
 
+ATTENTION: If you ever use code on or before tag v0.0.1, the current master branch is not backward compatible.
+
 Steps:
 ### 1. Create a Mixin Messenger account.
 Visit https://mixin.one/messenger to download App from AppStore, Google Play.
@@ -79,7 +81,7 @@ Result is following.
 If your order is valued about 1 USD, that means client need to deposit about 10 XLM, or 0.17 EOS.
 
 #### Create charge
-To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if expiredafter is ZERO.
+To accept bitcoin or eos payment, developer need to call localhost:8080/charges by http POST,  with parameter in body. 
 
 POST /charges
 
@@ -95,7 +97,7 @@ Following curl is an example:
 curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
 
 ```
-The command just tell the program to create a ETH charge address for client id "client1245", visit localhost:9090/123 when user paid in 60 minutes.
+The command just tell the program to create a ETH charge address for customer id "client1245", visit localhost:9090/123 when user paid enough asset to the address in 60 minutes.
 
 the result of the command will be 
 ```json
@@ -117,7 +119,7 @@ the result of the command will be
 	"Receivedamount":0,
 	"Paidstatus":0}
 ```
-Your client need content in Payment_methods. There three payment methods in the example.
+Your client need content in Payment_method.
 
 There are two types of payment method:
 1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address. In this example, show asset name ETH, payment address 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6 and payment amount to your client.
@@ -126,7 +128,10 @@ There are two types of payment method:
 Asset current price in USD and Bitcoin is inside payment record, so developer can calculate how many asset client should transfer to the address or account.
 
 ```json
-{"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
+{
+	"Priceinusd":"310.40105841",
+	"Priceinbtc":"0.02374051"
+}	
 ```
 
 
@@ -160,7 +165,6 @@ Response will be similar to following if payment is not yet confirmed
 	"Paidstatus":0}
 }
 ```
-The paymnet_records is empty here.
 
 Response will be similar to following if payment is already confirmed
 ```json
@@ -183,18 +187,12 @@ Response will be similar to following if payment is already confirmed
 	"Paidstatus":2
 }
 ```
-the payment_records are filled by transaction information. one of them are
-```json
-{
-	"Receivedamount":0.002,
-	"Paidstatus":2
-}
-```
+
 There are three kind of Paidstatus, 0 - not paid, 1 - partial paid, 2 - full or over paid
 
 
 #### payment notification webhook
-The program will visit following url when payment is confirmed.
+The program will visit following url when payment is finished.
 ```json
 "http://127.0.0.1"+webhookurl
 ```
