@@ -158,11 +158,8 @@ type ClientReq struct {
 	Callbackfired  bool
 }
 type CallbackRespone struct {
-	Reqid         string
-	Callbackurl   string
-	Paymentrecord Payment_Record
-	Valueinusd    float64
-	Valueinbtc    float64
+	Callbackurl string
+	Resp        ChargeResponse
 }
 
 type Searchtaskindb struct {
@@ -675,7 +672,7 @@ func user_interact(cmd_c chan PaymentReq, op_c chan OPReq, charge_c chan ChargeR
 }
 
 func fire_callback_url(v CallbackRespone) {
-	jsonValue, jserr := json.Marshal(v)
+	jsonValue, jserr := json.Marshal(v.Resp)
 	if jserr != nil {
 		return
 	}
@@ -1046,29 +1043,67 @@ func main() {
 			if db.Where(&MixinAccountindb{Userid: v.UserId}).First(&matched_account).RecordNotFound() == false {
 				go all_money_gomyhome(matched_account.Userid, matched_account.Sessionid, matched_account.Privatekey, matched_account.Pin, matched_account.Pintoken, admin_uuid_record.Uuid)
 				if matched_account.ClientReqid != 0 {
-					var matched_req ClientReq
-					db.First(&matched_req, matched_account.ClientReqid)
-					if matched_req.ID != 0 {
+					var charge_record ChargeRecordindb
+					db.Find(&charge_record, matched_account.ClientReqid)
+					if charge_record.ID != 0 {
 						var callback_response CallbackRespone
-						callback_response.Reqid = matched_req.Reqid
-						callback_response.Callbackurl = matched_req.Callbackurl
-						callback_response.Paymentrecord = Payment_Record{
-							CreatedAt:  v.CreatedAt,
-							Amount:     v.Amount,
-							AssetId:    v.AssetId,
-							SnapshotId: v.SnapshotId,
-						}
-						var asset_price Assetpriceindb
-						if db.Where(&Assetpriceindb{Assetid: v.AssetId}).First(&asset_price).RecordNotFound() == false {
-							amount_float, _ := strconv.ParseFloat(v.Amount, 64)
 
-							float_price_usd, _ := strconv.ParseFloat(asset_price.Priceinusd, 64)
-							callback_response.Valueinusd = amount_float * float_price_usd
+						var resp ChargeResponse
+						callback_response.Callbackurl = charge_record.Webhookurl
 
-							float_price_btc, _ := strconv.ParseFloat(asset_price.Priceinbtc, 64)
-							callback_response.Valueinbtc += amount_float * float_price_btc
+						resp.Id = charge_record.ID
+						resp.Currency = charge_record.Currency
+						resp.Amount = charge_record.Amount
+						resp.Customerid = charge_record.Customerid
+						resp.Expired_after = charge_record.Expiredafter
+
+						//looking for currency asset id from SYMBOL
+						var currentcy_asset_info AssetInformationindb
+						if db.Where(&AssetInformationindb{Symbol: charge_record.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
+							var payment_address DepositAddressindb
+							//find the currency payment address, this is a deposit address for crypto asset, different with lightning charge invoice
+							if db.Where(&DepositAddressindb{Accountrecord_id: matched_account.ID, Assetid: currentcy_asset_info.Assetid}).First(&payment_address).RecordNotFound() == false {
+								resp.Paymentmethod = PaymentMethod{
+									Name:           currentcy_asset_info.Symbol,
+									PaymentAddress: payment_address.Publicaddress,
+									PaymentAccount: payment_address.Accountname,
+									PaymentMemo:    payment_address.Accounttag,
+								}
+							}
+
+							//fill market price
+							var asset_price_record Assetpriceindb
+							if db.Where(&Assetpriceindb{Assetid: currentcy_asset_info.Assetid}).First(&asset_price_record).RecordNotFound() == false {
+								resp.Paymentmethod.Priceinusd = asset_price_record.Priceinusd
+								resp.Paymentmethod.Priceinbtc = asset_price_record.Priceinbtc
+							}
+
+							resp.Paidstatus = 0
+							resp.Receivedamount = 0
+							var all_assets_payment_snapshots_indb []Snapshotindb
+							db.Where(&Snapshotindb{UserId: matched_account.Userid, AssetId: currentcy_asset_info.Assetid}).Find(&all_assets_payment_snapshots_indb)
+							for _, v := range all_assets_payment_snapshots_indb {
+								f, err := strconv.ParseFloat(v.Amount, 64)
+								if err != nil {
+									log.Fatal(err)
+									continue
+								} else {
+									if f > 0 {
+										resp.Receivedamount += f
+									}
+								}
+							}
+
+							if resp.Receivedamount >= resp.Amount {
+								resp.Paidstatus = 2
+							}
+
+							if resp.Paidstatus == 2 {
+								callback_response.Resp = resp
+								payment_received_asset_chan <- callback_response
+							}
 						}
-						payment_received_asset_chan <- callback_response
+
 					}
 				}
 			}
