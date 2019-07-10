@@ -913,6 +913,7 @@ func main() {
 	db.AutoMigrate(&MessengerUserindb{})
 	db.AutoMigrate(&Assetpriceindb{})
 	db.AutoMigrate(&ChargeRecordindb{})
+	db.AutoMigrate(&ChargeRelationWithMixinAccountindb{})
 	var bot_config_instance = BotConfig{
 		user_id:     userid,
 		session_id:  sessionid,
@@ -1245,10 +1246,11 @@ func main() {
 			}
 
 		case v := <-charge_cmd_chan:
+			log.Println(v)
 			if v.Method == "GET" {
 				var charge_record ChargeRecordindb
+				var resp ChargeResponse
 				if db.Where(&ChargeRecordindb{Customerid: v.Customerid}).First(&charge_record).RecordNotFound() == false {
-					var resp ChargeResponse
 					resp.Currency = charge_record.Currency
 					resp.Amount = charge_record.Amount
 					resp.Customerid = charge_record.Customerid
@@ -1307,8 +1309,9 @@ func main() {
 						}
 					}
 					resp.Webhookurl = v.Webhookurl
-					v.Res_c <- resp
+
 				}
+				v.Res_c <- resp
 			} else {
 				var resp ChargeResponse
 				resp.Currency = v.Currency
