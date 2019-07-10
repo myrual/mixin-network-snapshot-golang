@@ -1284,7 +1284,6 @@ func main() {
 			}
 
 		case v := <-charge_cmd_chan:
-			log.Println(v)
 			if v.Method == "GET" {
 				var charge_record ChargeRecordindb
 				var resp ChargeResponse
@@ -1352,7 +1351,6 @@ func main() {
 			} else {
 				var resp ChargeResponse
 				var currentcy_asset_info AssetInformationindb
-				log.Println(v.Currency)
 				//understand currency symbol
 				if db.Where(&AssetInformationindb{Symbol: v.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
 					log.Println(currentcy_asset_info)
@@ -1395,124 +1393,6 @@ func main() {
 					}
 				}
 				v.Res_c <- resp
-			}
-		case v := <-req_cmd_chan:
-			if v.Method == "GET" {
-				payment_id := v.Reqid
-				var req ClientReq
-				var res PaymentRes
-				response_c := v.Res_c
-				db.Where(&ClientReq{Reqid: payment_id}).Find(&req)
-				if req.ID != 0 {
-					res.Reqid = v.Reqid
-					var mixin_account MixinAccountindb
-					db.Find(&mixin_account, req.MixinAccountid)
-					if mixin_account.ID != 0 {
-						var payment_addresses []DepositAddressindb
-						db.Where(&DepositAddressindb{Accountrecord_id: mixin_account.ID}).Find(&payment_addresses)
-						var all_method []PaymentMethod
-						for _, v := range payment_addresses {
-							var pv PaymentMethod
-							var asset_info AssetInformationindb
-							db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
-							log.Println(asset_info)
-							pv.Name = asset_info.Symbol
-							pv.PaymentAddress = v.Publicaddress
-							pv.PaymentAccount = v.Accountname
-							pv.PaymentMemo = v.Accounttag
-
-							var asset_price_record Assetpriceindb
-							if db.Where(&Assetpriceindb{Assetid: v.Assetid}).First(&asset_price_record).RecordNotFound() == false {
-								pv.Priceinusd = asset_price_record.Priceinusd
-								pv.Priceinbtc = asset_price_record.Priceinbtc
-							}
-
-							all_method = append(all_method, pv)
-						}
-
-						res.Payment_methods = all_method
-
-						var all_payment_snapshots_indb []Snapshotindb
-						var all_payment_snapshots []Payment_Record
-						var received_in_usd float64
-						var received_in_btc float64
-						db.Where(&Snapshotindb{UserId: mixin_account.Userid}).Find(&all_payment_snapshots_indb)
-						for _, v := range all_payment_snapshots_indb {
-							f, err := strconv.ParseFloat(v.Amount, 64)
-							if err != nil {
-								log.Println(err)
-								continue
-							} else {
-								if f > 0 {
-									this_snap := Payment_Record{
-										Amount:     v.Amount,
-										AssetId:    v.AssetId,
-										CreatedAt:  v.SnapCreatedAt,
-										SnapshotId: v.SnapshotId,
-									}
-									all_payment_snapshots = append(all_payment_snapshots, this_snap)
-									var asset_price Assetpriceindb
-									if db.Where(&Assetpriceindb{Assetid: v.AssetId}).First(&asset_price).RecordNotFound() == false {
-										float_price_usd, _ := strconv.ParseFloat(asset_price.Priceinusd, 64)
-										received_in_usd += f * float_price_usd
-										float_price_btc, _ := strconv.ParseFloat(asset_price.Priceinbtc, 64)
-										received_in_btc += f * float_price_btc
-									}
-								}
-							}
-						}
-						res.Payment_records = all_payment_snapshots
-						res.ReceivedinUSD = received_in_usd
-						res.ReceivedinBTC = received_in_btc
-						response_c <- res
-					} else {
-						response_c <- res
-					}
-				} else {
-					response_c <- res
-				}
-			} else {
-				unique_id := v.Reqid
-				response_c := v.Res_c
-				var res PaymentRes
-				var free_mixinaccount MixinAccountindb
-				if db.Where("client_reqid = ?", "0").First(&free_mixinaccount).RecordNotFound() == false {
-					res.Reqid = v.Reqid
-					new_req := ClientReq{
-						Reqid:          unique_id,
-						Callbackurl:    v.Callback,
-						MixinAccountid: free_mixinaccount.ID,
-					}
-					db.Create(&new_req)
-					free_mixinaccount.ClientReqid = new_req.ID
-					db.Save(&free_mixinaccount)
-					go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Duration(v.Expired_after)*time.Minute))
-					var payment_addresses []DepositAddressindb
-					db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID}).Find(&payment_addresses)
-					var all_method []PaymentMethod
-					for _, v := range payment_addresses {
-						var pv PaymentMethod
-						var asset_info AssetInformationindb
-						db.Where(&AssetInformationindb{Assetid: v.Assetid}).First(&asset_info)
-						log.Println(asset_info)
-						pv.Name = asset_info.Symbol
-						pv.PaymentAddress = v.Publicaddress
-						pv.PaymentAccount = v.Accountname
-						pv.PaymentMemo = v.Accounttag
-
-						var asset_price Assetpriceindb
-						if db.Where(&Assetpriceindb{Assetid: v.Assetid}).First(&asset_price).RecordNotFound() == false {
-							pv.Priceinusd = asset_price.Priceinusd
-							pv.Priceinbtc = asset_price.Priceinbtc
-						}
-						all_method = append(all_method, pv)
-
-					}
-					res.Payment_methods = all_method
-				} else {
-					log.Println("no new user account")
-				}
-				response_c <- res
 			}
 		}
 	}
