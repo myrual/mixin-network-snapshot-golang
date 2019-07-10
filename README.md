@@ -81,6 +81,15 @@ If your order is valued about 1 USD, that means client need to deposit about 10 
 #### Create charge
 To accept bitcoin or eos payment, developer need to call localhost:8080/payment by http POST,  with parameter in body. An unique string, a callback url and an expired timer should be in body. The unique string can be anything like uuid. Callback url will be visited by the program when your client paid to you. The callback mechanism will be expired if 60 minutes if you give expiredafter 60, the callback will always work if expiredafter is ZERO.
 
+POST /charges
+
+|Attributes| type | description|
+|--|--|--|
+|currency| String | Currency code associated with the amount.  Only EOS/XLM/ETH is supported currently|
+|amount| Float64 | Positive float|
+|customerid| String | This field is optional and can be used to attach an identifier of your choice to the charge. Must not exceed 64 characters|
+|webhookurl| String | program will visit localhost+webhook with charge record in json body|
+|expiredafter| uint | the charge will be expired after xx minutes|
 Following curl is an example:
 ```shell
 curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
