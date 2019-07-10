@@ -1047,15 +1047,15 @@ func main() {
 					db.Find(&charge_record, matched_account.ClientReqid)
 					if charge_record.ID != 0 {
 						var callback_response CallbackRespone
-
-						var resp ChargeResponse
 						callback_response.Callbackurl = charge_record.Webhookurl
 
+						var resp ChargeResponse
 						resp.Id = charge_record.ID
 						resp.Currency = charge_record.Currency
 						resp.Amount = charge_record.Amount
 						resp.Customerid = charge_record.Customerid
 						resp.Expired_after = charge_record.Expiredafter
+						resp.Webhookurl = charge_record.Webhookurl
 
 						//looking for currency asset id from SYMBOL
 						var currentcy_asset_info AssetInformationindb
@@ -1096,6 +1096,8 @@ func main() {
 
 							if resp.Receivedamount >= resp.Amount {
 								resp.Paidstatus = 2
+							} else if resp.Receivedamount > 0 {
+								resp.Paidstatus = 1
 							}
 
 							if resp.Paidstatus == 2 {
@@ -1103,7 +1105,6 @@ func main() {
 								payment_received_asset_chan <- callback_response
 							}
 						}
-
 					}
 				}
 			}
@@ -1289,14 +1290,14 @@ func main() {
 				var resp ChargeResponse
 				charge_record_id, _ := strconv.ParseUint(v.Id, 10, 32)
 				db.Find(&charge_record, charge_record_id)
-				log.Println(v)
+
 				if charge_record.ID != 0 {
-					log.Println(charge_record)
 					resp.Id = charge_record.ID
 					resp.Currency = charge_record.Currency
 					resp.Amount = charge_record.Amount
 					resp.Customerid = charge_record.Customerid
 					resp.Expired_after = charge_record.Expiredafter
+					resp.Webhookurl = charge_record.Webhookurl
 
 					//looking for currency asset id from SYMBOL
 					var currentcy_asset_info AssetInformationindb
@@ -1345,7 +1346,7 @@ func main() {
 							}
 						}
 					}
-					resp.Webhookurl = v.Webhookurl
+
 				}
 				v.Res_c <- resp
 			} else {
