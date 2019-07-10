@@ -299,6 +299,7 @@ type ChargeReqhttp struct {
 	Expired_after uint32  `json:"expiredafter"`
 }
 type ChargeResponse struct {
+	Id             uint
 	Currency       string
 	Amount         float64
 	Customerid     string
@@ -311,6 +312,7 @@ type ChargeResponse struct {
 
 type ChargeReq struct {
 	Method        string
+	Id            string
 	Currency      string
 	Amount        float64
 	Customerid    string
@@ -1263,7 +1265,6 @@ func main() {
 						if db.Where(&ChargeRelationWithMixinAccountindb{Chargerecordid: charge_record.ID}).First(&charge_mixinaccount_relation).RecordNotFound() == false {
 							//find relation record with mixin account
 							var mixin_account MixinAccountindb
-
 							db.Find(&mixin_account, charge_mixinaccount_relation.Mixinaccountid)
 							if mixin_account.ID != 0 {
 								var payment_address DepositAddressindb
@@ -1314,13 +1315,49 @@ func main() {
 				v.Res_c <- resp
 			} else {
 				var resp ChargeResponse
-				resp.Currency = v.Currency
-				resp.Amount = v.Amount
-				resp.Customerid = v.Customerid
-				resp.Expired_after = v.Expired_after
-				resp.Paidstatus = 0
-				resp.Receivedamount = 0
-				resp.Webhookurl = v.Webhookurl
+				var charge_record ChargeRecordindb
+				var currentcy_asset_info AssetInformationindb
+
+				//understand currency symbol
+				if db.Where(&AssetInformationindb{Symbol: charge_record.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
+					var new_charge ChargeRecordindb
+					new_charge.Currency = v.Currency
+					new_charge.Amount = v.Amount
+					new_charge.Customerid = v.Customerid
+					new_charge.Expiredafter = v.Expired_after
+					new_charge.Webhookurl = v.Webhookurl
+					db.Create(&new_charge)
+
+					resp.Id = new_charge.ID
+					resp.Currency = new_charge.Currency
+					resp.Amount = new_charge.Amount
+					resp.Customerid = new_charge.Customerid
+					resp.Expired_after = new_charge.Expiredafter
+					resp.Webhookurl = new_charge.Webhookurl
+
+					var free_mixinaccount MixinAccountindb
+					if db.Where("client_reqid = ?", "0").First(&free_mixinaccount).RecordNotFound() == false {
+						free_mixinaccount.ClientReqid = new_charge.ID
+						db.Save(&free_mixinaccount)
+						go search_userincome("", free_mixinaccount.Userid, free_mixinaccount.Sessionid, free_mixinaccount.Privatekey, my_snapshot_chan, global_progress_c, free_mixinaccount.Utccreated_at, time.Now(), time.Now().Add(time.Duration(v.Expired_after)*time.Minute))
+						var payment_address DepositAddressindb
+						//find the currency payment address, this is a deposit address for crypto asset, different with lightning charge invoice
+						if db.Where(&DepositAddressindb{Accountrecord_id: free_mixinaccount.ID, Assetid: currentcy_asset_info.Assetid}).First(&payment_address).RecordNotFound() == false {
+							resp.Paymentmethod = PaymentMethod{
+								Name:           currentcy_asset_info.Symbol,
+								PaymentAddress: payment_address.Publicaddress,
+								PaymentAccount: payment_address.Accountname,
+								PaymentMemo:    payment_address.Accounttag,
+							}
+						}
+						//fill market price
+						var asset_price_record Assetpriceindb
+						if db.Where(&Assetpriceindb{Assetid: currentcy_asset_info.Assetid}).First(&asset_price_record).RecordNotFound() == false {
+							resp.Paymentmethod.Priceinusd = asset_price_record.Priceinusd
+							resp.Paymentmethod.Priceinbtc = asset_price_record.Priceinbtc
+						}
+					}
+				}
 				v.Res_c <- resp
 			}
 		case v := <-req_cmd_chan:
