@@ -94,7 +94,7 @@ POST /charges
 |expiredafter| uint | the webhook will be expired after xx minutes. User can pay to an expired charge , program keep income record and will transfer asset to admin account|
 
 
-Example: let client "client1245" pay 0.001 ETH, charge will be expired after 60 minutes
+Example: let client "client1245" pay 0.001 ETH, notify developer's app by POST localhost:9090/123 when user pay enough currency in 60 minutes.
 ```shell
 curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
 ```
@@ -122,7 +122,7 @@ the result of the command will be
 ```
 Client need to tranfser 0.001 ETH to address 0x130D3e6655f073e33235e567E7A1e1E1f59ddD79 to finish the payment. 
 
-If you need other currency like EOS
+If you want to accept EOS
 
 ```shell
  $ curl -d '{"currency":"EOS", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":5}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
