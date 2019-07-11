@@ -92,7 +92,9 @@ POST /charges
 |customerid| String | This field is optional and can be used to attach an identifier of your choice to the charge. Must not exceed 64 characters|
 |webhookurl| String | program will visit localhost+webhook with charge record in json body|
 |expiredafter| uint | the charge will be expired after xx minutes|
-Following curl is an example:
+
+
+Example: create charge for Ethereum.
 ```shell
 curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
 
@@ -255,7 +257,7 @@ All asset supported by Mixin Network:
 BTC, USDT, BCH, ETH and ERC20, ETC, EOS and token issue on EOS, DASH, Litecoin, Doge, Horizen, MGD, NEM, XRP, XLM, TRON and TRC10, Zcash. 
 
 ### Recommend Currency
-Current default cryptocurrency is EOS and XLM because transaction can be confirmed in 3 minutes.
+Three kind of currency : ETH, EOS, XLM are accepted in code.
 
 To support more currency, just add more asset into the default_asset_id_group.
 ```go
@@ -284,7 +286,7 @@ const (
 .......
 
 	// to support more asset, just add them in the following array
-	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID}
+	default_asset_id_group := []string{XLM_ASSET_ID, EOS_ASSET_ID, ETH_ASSET_ID}
 ```
 
 
