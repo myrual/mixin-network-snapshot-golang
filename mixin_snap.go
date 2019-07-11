@@ -611,7 +611,7 @@ func paymentHandle(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func user_interact(cmd_c chan PaymentReq, op_c chan OPReq, charge_c chan ChargeReq) {
+func user_interact(op_c chan OPReq, charge_c chan ChargeReq) {
 	http.HandleFunc("/charges", makeChargeHandle(charge_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
 	http.HandleFunc("/snaps", allsnapsHandle(op_c))
@@ -834,7 +834,6 @@ func main() {
 	var asset_received_snap_chan = make(chan *Snapshot, 1000)
 	var global_progress_c = make(chan Searchprogress, 1000)
 	var quit_chan = make(chan int, 2)
-	var req_cmd_chan = make(chan PaymentReq, 2)
 	var charge_cmd_chan = make(chan ChargeReq, 2)
 	var single_direction_op_cmd_chan = make(chan OPReq, 2)
 	var new_account_received_chan = make(chan MixinAccountindb, 100)
@@ -921,7 +920,7 @@ func main() {
 	}
 
 	restore_searchsnap(bot_config_instance, my_snapshot_chan, global_progress_c, default_asset_id_group, ongoing_searchtasks_inram)
-	go user_interact(req_cmd_chan, single_direction_op_cmd_chan, charge_cmd_chan)
+	go user_interact(single_direction_op_cmd_chan, charge_cmd_chan)
 
 	should_create_more_account_c <- 1
 	update_asset_price_c <- 1
