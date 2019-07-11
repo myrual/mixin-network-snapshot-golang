@@ -188,7 +188,7 @@ Response will be similar to following if payment is already confirmed
 }
 ```
 
-There are three kind of Paidstatus, 0 - not paid, 1 - partial paid, 2 - full or over paid
+There are three kind of Paidstatus, 0 - not paid, 1 - partial paid, 2 - full paid, 3 - over paid.
 
 
 #### payment notification webhook

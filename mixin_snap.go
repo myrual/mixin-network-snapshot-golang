@@ -1035,7 +1035,9 @@ func main() {
 								}
 							}
 
-							if resp.Receivedamount >= resp.Amount {
+							if resp.Receivedamount > resp.Amount {
+								resp.Paidstatus = 3
+							} else if resp.Receivedamount == resp.Amount {
 								resp.Paidstatus = 2
 							} else if resp.Receivedamount > 0 {
 								resp.Paidstatus = 1
@@ -1278,8 +1280,9 @@ func main() {
 									}
 								}
 							}
-
-							if resp.Receivedamount >= resp.Amount {
+							if resp.Receivedamount > resp.Amount {
+								resp.Paidstatus = 3
+							} else if resp.Receivedamount == resp.Amount {
 								resp.Paidstatus = 2
 							} else if resp.Receivedamount > 0 {
 								resp.Paidstatus = 1
@@ -1294,7 +1297,6 @@ func main() {
 				var currentcy_asset_info AssetInformationindb
 				//understand currency symbol
 				if db.Where(&AssetInformationindb{Symbol: v.Currency}).First(&currentcy_asset_info).RecordNotFound() == false {
-					log.Println(currentcy_asset_info)
 					var new_charge ChargeRecordindb
 					new_charge.Currency = v.Currency
 					new_charge.Amount = v.Amount
