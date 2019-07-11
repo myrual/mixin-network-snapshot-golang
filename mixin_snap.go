@@ -150,13 +150,7 @@ type Assetpriceindb struct {
 	Priceinusd string
 	Priceinbtc string
 }
-type ClientReq struct {
-	gorm.Model
-	Reqid          string
-	Callbackurl    string
-	MixinAccountid uint
-	Callbackfired  bool
-}
+
 type CallbackRespone struct {
 	Callbackurl string
 	Resp        ChargeResponse
@@ -854,7 +848,6 @@ func main() {
 	db.AutoMigrate(&Snapshotindb{})
 	db.AutoMigrate(&Searchtaskindb{})
 	db.AutoMigrate(&MixinAccountindb{})
-	db.AutoMigrate(&ClientReq{})
 	db.AutoMigrate(&DepositAddressindb{})
 	db.AutoMigrate(&AssetInformationindb{})
 	db.AutoMigrate(&MessengerUserindb{})
