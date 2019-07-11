@@ -812,7 +812,7 @@ func restore_searchsnap(bot_config BotConfig, in_result_chan chan *Snapshot, in_
 				search_asset_task := Searchtask{
 					start_t:           botCreateAt,
 					max_len:           500,
-					yesterday2today:   false,
+					yesterday2today:   true,
 					asset_id:          v,
 					userconfig:        bot_config,
 					includesubaccount: true,
@@ -949,11 +949,9 @@ func main() {
 				db.Save(&searchtaskindb)
 			}
 		case v := <-my_snapshot_chan:
-			snapInDb := Snapshotindb{
-				SnapshotId: v.SnapshotId,
-			}
-			db.First(&snapInDb, "snapshot_id = ?", v.SnapshotId)
-			if snapInDb.CreatedAt.IsZero() {
+			var snapInDb Snapshotindb
+			if db.Where(&Snapshotindb{SnapshotId: v.SnapshotId}).First(&snapInDb).RecordNotFound() == true {
+				log.Println(v)
 				var thisrecord = Snapshotindb{
 					SnapshotId:    v.SnapshotId,
 					Amount:        v.Amount,
