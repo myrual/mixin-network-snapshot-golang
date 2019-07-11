@@ -951,7 +951,6 @@ func main() {
 		case v := <-my_snapshot_chan:
 			var snapInDb Snapshotindb
 			if db.Where(&Snapshotindb{SnapshotId: v.SnapshotId}).First(&snapInDb).RecordNotFound() == true {
-				log.Println(v)
 				var thisrecord = Snapshotindb{
 					SnapshotId:    v.SnapshotId,
 					Amount:        v.Amount,
