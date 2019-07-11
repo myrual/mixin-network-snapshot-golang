@@ -505,56 +505,7 @@ func read_snap_to_future(req_task Searchtask, result_chan chan *Snapshot, in_pro
 		}
 	}
 }
-func makePaymentHandle(input chan PaymentReq) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "GET":
-			keys, ok := r.URL.Query()["reqid"]
-			if ok != true || len(keys[0]) < 1 {
-				io.WriteString(w, "Missing parameter reqid!\n")
-				return
-			}
-			payment_res_c := make(chan PaymentRes, 1)
-			req := PaymentReq{
-				Method: "GET",
-				Reqid:  keys[0],
-				Res_c:  payment_res_c,
-			}
-			input <- req
-			v := <-payment_res_c
-			b, jserr := json.Marshal(v)
-			if jserr != nil {
-				log.Println(jserr)
-			} else {
-				w.Write(b)
-			}
-		case "POST":
-			d := json.NewDecoder(r.Body)
-			var p PaymentReqhttp
-			errjs := d.Decode(&p)
-			if errjs != nil {
-				http.Error(w, errjs.Error(), http.StatusInternalServerError)
-			}
-			payment_res_c := make(chan PaymentRes, 1)
-			req := PaymentReq{
-				Reqid:         p.Reqid,
-				Callback:      p.Callback,
-				Res_c:         payment_res_c,
-				Expired_after: p.Expired_after,
-			}
-			input <- req
-			v := <-payment_res_c
-			b, jserr := json.Marshal(v)
-			if jserr != nil {
-				log.Println(jserr)
-			} else {
-				w.Write(b)
-			}
-		default:
-			io.WriteString(w, "Wrong!\n")
-		}
-	}
-}
+
 func makeChargeHandle(input chan ChargeReq) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -661,8 +612,6 @@ func paymentHandle(w http.ResponseWriter, req *http.Request) {
 }
 
 func user_interact(cmd_c chan PaymentReq, op_c chan OPReq, charge_c chan ChargeReq) {
-
-	http.HandleFunc("/payment", makePaymentHandle(cmd_c))
 	http.HandleFunc("/charges", makeChargeHandle(charge_c))
 	http.HandleFunc("/moneygohome", moneyGoHomeHandle(op_c))
 	http.HandleFunc("/snaps", allsnapsHandle(op_c))
