@@ -188,7 +188,16 @@ Response will be similar to following if payment is already confirmed
 }
 ```
 
-There are three kind of Paidstatus, 0 - not paid, 1 - partial paid, 2 - full paid, 3 - over paid.
+Paid status
+
+|value | description|
+|--|--|
+|0| not yet paid|
+|1| partial paid|
+|2| paid|
+|3| over paid|
+
+The payment address is a deposit address in cryptocurrency world, so user can deposit any amount. 
 
 
 #### payment notification webhook
