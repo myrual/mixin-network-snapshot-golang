@@ -90,14 +90,13 @@ POST /charges
 |currency| String | Currency code associated with the amount.  Only EOS/XLM/ETH is supported currently|
 |amount| Float64 | Positive float|
 |customerid| String | This field is optional and can be used to attach an identifier of your choice to the charge. Must not exceed 64 characters|
-|webhookurl| String | program will visit localhost+webhook with charge record in json body|
-|expiredafter| uint | the charge will be expired after xx minutes|
+|webhookurl| String | program will visit localhost+webhook when user pay enough currency before charge is expired |
+|expiredafter| uint | the webhook will be expired after xx minutes. User can pay to an expired charge , program keep income record and will transfer asset to admin account|
 
 
-Example: create charge for Ethereum.
+Example: let client "client1245" pay 0.001 ETH, charge will be expired after 60 minutes
 ```shell
 curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
-
 ```
 The command just tell the program to create a ETH charge address for customer id "client1245", visit localhost:9090/123 when user paid enough asset to the address in 60 minutes.
 
@@ -121,7 +120,61 @@ the result of the command will be
 	"Receivedamount":0,
 	"Paidstatus":0}
 ```
-Your client need content in Payment_method.
+Client need to tranfser 0.001 ETH to address 0x130D3e6655f073e33235e567E7A1e1E1f59ddD79 to finish the payment. 
+
+If you need other currency like EOS
+
+```shell
+ $ curl -d '{"currency":"EOS", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":5}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
+```
+```json
+{
+	"Id":2,
+	"Currency":"EOS",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":5,
+	"Paymentmethod":{
+		"Name":"EOS",
+		"PaymentAddress":"",
+		"PaymentAccount":"eoswithmixin",
+		"PaymentMemo":"a01a148f234ea8be0229a4422d21e7f3",
+		"Priceinusd":"4.63264861",
+		"Priceinbtc":"0.00040277"
+	},
+	"Receivedamount":0,
+	"Paidstatus":0
+}
+```
+Client need to tranfser 0.001 EOS to account eoswithmixin, and MUST fill memo a01a148f234ea8be0229a4422d21e7f3 to finish the payment. 
+
+
+If you want to accept Stellar XLM
+```shell
+curl -d '{"currency":"XLM", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":5}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
+```
+```json
+{
+	"Id":3,
+	"Currency":"XLM",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":5,
+	"Paymentmethod":{
+		"Name":"XLM",
+		"PaymentAddress":"",
+		"PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y",
+		"PaymentMemo":"45da67ad857c907a",
+		"Priceinusd":"0.08866487",
+		"Priceinbtc":"0.00000769"
+	},
+	"Receivedamount":0,
+	"Paidstatus":0
+}
+```
+Client need to tranfser 0.001 XLM to account GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y, and MUST fill memo 45da67ad857c907a to finish the payment. 
 
 There are two types of payment method:
 1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address. In this example, show asset name ETH, payment address 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6 and payment amount to your client.
@@ -136,6 +189,16 @@ Asset current price in USD and Bitcoin is inside payment record, so developer ca
 }	
 ```
 
+Currency list
+
+|Currency| Explain | introduction|
+|-| - | - |
+|EOS|EOS.io main chain token|-|
+|XLM|Stellar main chain token|-|
+|BTC|Bitcoin|-|
+|UDT|Tether USD|Running on Bitcoin instead of Ethereum|
+|XRP|Ripple|-|
+|LTC|Litecoin|-|
 
 #### Query payment status
 fetch the payment status by visit localhost:8080/payment with parameter reqid
