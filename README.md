@@ -148,7 +148,7 @@ If you want to accept EOS
 }
 ```
 Client need to tranfser 0.001 EOS to account eoswithmixin, and MUST fill memo a01a148f234ea8be0229a4422d21e7f3 to finish the payment. 
-
+![](https://github.com/myrual/mixin-network-snapshot-golang/raw/master/EOS_pay.jpg)
 
 If you want to accept Stellar XLM
 ```shell
@@ -175,6 +175,7 @@ curl -d '{"currency":"XLM", "amount":0.001, "customerid":"client1245", "webhooku
 }
 ```
 Client need to tranfser 0.001 XLM to account GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y, and MUST fill memo 45da67ad857c907a to finish the payment. 
+![](https://github.com/myrual/mixin-network-snapshot-golang/raw/master/XLM_pay.jpg)
 
 There are two types of payment method:
 1. Bitcoin/Ethereum style: PaymentAddress is not empty, PaymentAccount and PaymentMemo are all empty. You just  show Ethererum Name and PaymentAddress to your clients, they just need to transfer token to the address. In this example, show asset name ETH, payment address 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6 and payment amount to your client.
