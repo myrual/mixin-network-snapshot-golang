@@ -253,7 +253,7 @@ Payment_method的记录内容里面有该资产当前的美元价格和比特币
 
 payment_records 有支付信息. 其中一个支付信息如下
 
-#### 回掉URL
+#### 回调URL
 用户支付完毕后，程序会访问本地+webook url
 ```json
 "http://127.0.0.1"+webhookurl
