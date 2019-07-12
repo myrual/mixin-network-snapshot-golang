@@ -1,7 +1,10 @@
 # 数字货币收款插件
-不需要了解比特币，EOS的全部API，不需要搭建全节点就可以接收数字货币付款.
+轻松，免费，安全的数字货币收款方案
+* 无需搭建比特币/以太坊/EOS全节点(每一个都需要几百G空间)
+* 无手续费，你的程序你做主
+* 所有收到的钱实时自动转移到开发者个人账户，即使被拖库也没钱可盗。
 
-这个程序是一个全集成方案，开发者只需要通过http api就可以调用接口，把付款方式展示给消费者，程序会自动访问回掉URL。
+开发者访问本地 http 接口，向用户展示付款方法，用户付款后程序会访问本地回调URL
 
 步骤:
 ### 1. 创建一个Mixin Messenger账户.
@@ -71,127 +74,209 @@ curl -X GET 'http://localhost:8080/assetsprice'
 ]
 ```
 如果订单价值1美金，那么根据资产价格可以知道客户需要 10 XLM, 或者 0.17 EOS。
-#### 如何接受数字货币付款
-为了接受比特币，EOS支付，开发者需要用http POST方法访问 localhost:8080/payment，参数放在body里面。 body里面应该有 唯一标示字符串，回掉URL，以及回掉过期时间。 唯一标示字符串可以是任意字符，uuid也可以。 程序收到用户的付款之后会用http post方法访问回掉本机Callback url。
-回掉机制有有效期，过了有效期，回掉机制会停止。如果回掉有效期参数为60， 那么回掉机制会在60分钟后过期。
-curl例子
-```shell
-curl -d '{"reqid":"value8", "callback":":9090/", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/payment
-```
-这条指令指示程序为value8创建一个支付地址，如果在60分钟内收到用户支付，那么程序会http post方式访问 localhost:9090/，同时带有参数。
+#### 创建支付请求
+用POST方法访问 localhost:8080/charges，参数如下 
 
-这条指令的返回结果是
+POST /charges
+
+|Attributes| type | description|
+|--|--|--|
+|currency| String | Currency code associated with the amount.  Only EOS/XLM/ETH is supported currently|
+|amount| Float64 | Positive float|
+|customerid| String | This field is optional and can be used to attach an identifier of your choice to the charge. Must not exceed 64 characters|
+|webhookurl| String | program will visit localhost+webhook when user pay enough currency before charge is expired |
+|expiredafter| uint | the webhook will be expired after xx minutes. User can pay to an expired charge , program keep income record and will transfer asset to admin account|
+
+举例: 需要让客户 "client1245" 支付 0.001 ETH, 60分钟内支付完成之后访问用 POST 访问 localhost:9090/123。
+```shell
+curl -d '{"currency":"ETH", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":60}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
+```
+
+这条指令返回结果
 ```json
 {
-	"Reqid":"value8",
-	"Payment_methods":[
-		{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
-		{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
-		{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
-	],
-	"Payment_records":null,
-	"Balance":null,
-	"ReceivedinUSD":0,
-	"ReceivedinBTC":0
+	"Id":3,
+	"Currency":"ETH",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":60,
+	"Paymentmethod":{
+		"Name":"ETH",
+		"PaymentAddress":"0x130D3e6655f073e33235e567E7A1e1E1f59ddD79",
+		"PaymentAccount":"",
+		"PaymentMemo":"",
+		"Priceinusd":"310.40105841",
+		"Priceinbtc":"0.02374051"
+		},
+	"Receivedamount":0,
+	"Paidstatus":0}
+```
+客户需要向以太坊地址 0x130D3e6655f073e33235e567E7A1e1E1f59ddD79 支付0.001 ETH来完成支付。 
+
+如果想收EOS
+```shell
+ $ curl -d '{"currency":"EOS", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":5}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
+```
+```json
+{
+	"Id":2,
+	"Currency":"EOS",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":5,
+	"Paymentmethod":{
+		"Name":"EOS",
+		"PaymentAddress":"",
+		"PaymentAccount":"eoswithmixin",
+		"PaymentMemo":"a01a148f234ea8be0229a4422d21e7f3",
+		"Priceinusd":"4.63264861",
+		"Priceinbtc":"0.00040277"
+	},
+	"Receivedamount":0,
+	"Paidstatus":0
 }
 ```
-Payment_methods里面的结果是给客户看的，这个例子有三个支付方法。
+客户需要向EOS账户 eoswithmixin 支付 0.001 EOS, 并且必须填写支付备注 a01a148f234ea8be0229a4422d21e7f3。 
+![](https://github.com/myrual/mixin-network-snapshot-golang/raw/master/EOS_pay.jpg)
 
-有两种风格的支付：
+如果想收XLM
+```shell
+curl -d '{"currency":"XLM", "amount":0.001, "customerid":"client1245", "webhookurl":":9090/123", "expiredafter":5}' -H "Content-Type: application/json" 127.0.0.1:8080/charges
+```
+```json
+{
+	"Id":3,
+	"Currency":"XLM",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":5,
+	"Paymentmethod":{
+		"Name":"XLM",
+		"PaymentAddress":"",
+		"PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y",
+		"PaymentMemo":"45da67ad857c907a",
+		"Priceinusd":"0.08866487",
+		"Priceinbtc":"0.00000769"
+	},
+	"Receivedamount":0,
+	"Paidstatus":0
+}
+```
+客户需要向Stellar账户 GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y 支付 0.001 XLM, 并且必须填写支付备注 45da67ad857c907a 
+![](https://github.com/myrual/mixin-network-snapshot-golang/raw/master/XLM_pay.jpg)
+
+
+Payment_method里面有两种类型的支付：
 1. 比特币/以太坊: PaymentAddress 不是空，PaymentAccount 和 PaymentMemo是空。这种情况下，你只需要给用户展示资产名字 以太坊和PaymentAddress，客户只需要向以太坊地址付款。在这个例子里面，向用户展示资产名称 ETH，以及收款地址 0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6，以及你期望的以太坊数量。
-2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。在这个例子里面，向用户展示资产名称 EOS ， 收款账号 eoswithmixin 以及收款备注 302c37ebff05ccf09dd7296053d1924a，当然也包括你期望的资产数量。
+2. EOS/行星 : PaymentAddress 是空, PaymentAccount 和 PaymentMemo 都有内容。这种情况下，你需要给用户展示资产名字，收款账户和收款备注，并且严肃的提醒用户同时填写收款账户和收款备注，客户如果忘记填写备注，会导致不能到账，而且无法退款。
 
-Payment_methods的记录内容里面有该资产当前的美元价格和比特币价格，开发者可以根据订单的美元价格来计算客户应该支付多少数字货币。
+Payment_method的记录内容里面有该资产当前的美元价格和比特币价格，开发者可以根据订单的美元价格来计算客户应该支付多少数字货币。
 ```json
 {"Priceinusd":"0.10472789","Priceinbtc":"0.00000925"}
 ```
 
+支持的货币列表
+
+|Currency| 说明 | 介绍|
+|-| - | - |
+|EOS|EOS.io 主网token|-|
+|XLM|Stellar 主网token|-|
+|BTC|比特币|-|
+|UDT|Tether USD|基于比特币的USDT，不是ERC20的代币|
+|XRP|锐波币|-|
+|LTC|莱特币|-|
+
 #### 检查收款状态
-通过参数 reqid 访问 localhost:8080/payment 可以查询收款状态和记录。
+访问 localhost:8080/charges, 带有参数charge_id
 
-例子:
+例子
 ```shell
-curl -X GET 'http://localhost:8080/payment?reqid=value8'
+ curl -X GET 'http://localhost:8080/charges?charge_id=3'
+
 ```
 
-如果客户还没有支付，那么结果是这样的
+如果客户还没有支付，结果如下
 ```json
 {
-	"Reqid":"value8",
-	"Payment_methods":[
-		{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
-		{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
-		{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
-	],
-	"Payment_records":null,
-	"Balance":null,
-	"ReceivedUSD":0,
-	"ReceivedBTC":0
+	"Id":3,
+	"Currency":"ETH",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":60,
+	"Paymentmethod":{
+		"Name":"ETH",
+		"PaymentAddress":"0x130D3e6655f073e33235e567E7A1e1E1f59ddD79",
+		"PaymentAccount":"",
+		"PaymentMemo":"",
+		"Priceinusd":"310.40105841",
+		"Priceinbtc":"0.02374051"
+		},
+	"Receivedamount":0,
+	"Paidstatus":0}
 }
 ```
-paymnet_records 是空
 
-如果客户已经支付了，结果是这样的。
-
+如果客户已经支付了，那么结果如下
 ```json
 {
-	"Reqid":"value8",
-	"Payment_methods":[
-		{"Name":"XLM","PaymentAddress":"","PaymentAccount":"GD77JOIFC622O5HXU446VIKGR5A5HMSTAUKO2FSN5CIVWPHXDBGIAG7Y","PaymentMemo":"3f8db42022b5bc32","Priceinusd":"0.10472789","Priceinbtc":"0.00000925"},
-		{"Name":"EOS","PaymentAddress":"","PaymentAccount":"eoswithmixin","PaymentMemo":"302c37ebff05ccf09dd7296053d1924a","Priceinusd":"5.9436916","Priceinbtc":"0.00052505"},
-		{"Name":"ETH","PaymentAddress":"0x365DA43BC7B22CD4334c3f35eD189C8357D4bEd6","PaymentAccount":"","PaymentMemo":"","Priceinusd":"295.86024062","Priceinbtc":"0.02613571"}
-	],
-	"Payment_records":[
-		{"Amount":"0.1","AssetId":"","created_at":"2019-06-20T02:00:39.650472961Z","snapshot_id":"570233aa-3c91-45cd-a6ec-0e9724165300"},
-		{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:33:50.152539755Z","snapshot_id":"88859d4d-5bee-4fb5-aef6-ac01dc3a43c6"},
-		{"Amount":"0.01","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:37:05.870885973Z","snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306"},
-		{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:40:53.251365044Z","snapshot_id":"f2c8a751-3d30-472e-bf76-924787f341b9"},
-		{"Amount":"0.001","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T02:59:28.854380284Z","snapshot_id":"3ebfd5a3-bd29-4e32-bd06-2506bee3da99"},
-		{"Amount":"-0.122","AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d","created_at":"2019-06-20T03:00:17.249302744Z","snapshot_id":"0bfe6f6b-1ff8-4144-9786-52d6a6459b19"}
-	],
-	"Balance":null,
-	"ReceivedinUSD":0.605570253,
-	"ReceivedinBTC":0.000052239
+	"Id":3,
+	"Currency":"ETH",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":60,
+	"Paymentmethod":{
+		"Name":"ETH",
+		"PaymentAddress":"0x130D3e6655f073e33235e567E7A1e1E1f59ddD79",
+		"PaymentAccount":"",
+		"PaymentMemo":"",
+		"Priceinusd":"309.75108846",
+		"Priceinbtc":"0.02369282"
+	},
+	"Receivedamount":0.002,
+	"Paidstatus":2
 }
 ```
+
+支付状态 Paidstatus的解释
+
+|值 | 解释|
+|--|--|
+|0| 还没有支付|
+|1| 支付不足|
+|2| 支付完毕|
+|3| 支付超过需求|
+
 payment_records 有支付信息. 其中一个支付信息如下
-```json
-{
-	"Amount":"0.01",
-	"AssetId":"6cfe566e-4aad-470b-8c9a-2fd35b49c68d",
-	"created_at":"2019-06-20T02:37:05.870885973Z",
-	"snapshot_id":"6530f455-3238-491a-a9c5-bbcb52bcc306",
-}
-```
-这是一条来自客户的支付: 
-* 数量 0.01
-* 资产id 6cfe566e-4aad-470b-8c9a-2fd35b49c68d，是 EOS 主网token
-* 支付生成于 UTC 2019-06-20T02:37:05.870885973
-* 该支付在Mixin Network内的唯一标示号 6530f455-3238-491a-a9c5-bbcb52bcc306，你可以在浏览器里面验证这笔交易 https://mixin.one/snapshots/6530f455-3238-491a-a9c5-bbcb52bcc306
-
-ReceivedinUSD 和 ReceivedinBTC 表示当前支付请求收到的资产的美元价格和比特币价格。
-```json
-{"ReceivedinUSD":0.605570253,"ReceivedinBTC":0.000052239}
-```
 
 #### 回掉URL
-在有效期内收到用户付款，程序会访问本地的回掉URL。
+用户支付完毕后，程序会访问本地+webook url
 ```json
-"http://127.0.0.1"+callbackurl
+"http://127.0.0.1"+webhookurl
 ```
-http访问方法是POST，参数在body里面，例子如下
+http 方法为POST，body 参数如下
 ```json
 {
-	"Reqid":"value10",
-	"Callbackurl":":9090/",
-	"Paymentrecord":{
-		"Amount":"0.1",
-		"AssetId":"56e63c06-b506-4ec5-885a-4a5ac17b83c1",
-		"created_at":"2019-07-04T10:42:33.230498307Z",
-		"snapshot_id":"f505bf8d-ee80-4922-bb0b-28d9f9e64da4"
+	"Id":3,
+	"Currency":"ETH",
+	"Amount":0.001,
+	"Customerid":"client1245",
+	"Webhookurl":":9090/123",
+	"Expired_after":60,
+	"Paymentmethod":{
+		"Name":"ETH",
+		"PaymentAddress":"0x130D3e6655f073e33235e567E7A1e1E1f59ddD79",
+		"PaymentAccount":"",
+		"PaymentMemo":"",
+		"Priceinusd":"309.75108846",
+		"Priceinbtc":"0.02369282"
 	},
-	"Valueinusd":0.010341134000000002,
-	"Valueinbtc":8.93e-7
+	"Receivedamount":0.0021,
+	"Paidstatus":2
 }
 ```
 
@@ -216,9 +301,8 @@ total 20 account will send all balance to admin
 3. Bitcoin/USDT: 60 分钟
 4. Litecoin/Ethererum/DOGE: 120 分钟
 
-什么是确认时间？大部分数字货币从用户发起转账请求，到收款方确认这笔付款不能回滚需要一点时间。
-
-为什么这么长？这是Mixin Network 本身的设定，你现在改不了。
+#### 什么是确认时间？为什么要关心确认时间？
+数字货币从用户发起转账请求，到收款方确认这笔付款不能回滚需要一点时间，比特币需要的时间长，其他需要的时间短一点。
 
 ### 支持哪些资产
 理论上Mixin Network支持的都可以接受。现在支持

@@ -4,9 +4,12 @@
 
 # Cryptocurrency payment plugin
 
-Web developer can accept cryptocurrency without understand Bitcoin, EOS full API. No need to setup full node.
+Accept cryptocurrency payment can be painless, free and secure. 
+* No need to setup full Bitcoin/Ethereum/EOS full node(it cost your hundreds gigabytes).
+* No need to pay expensive service fee, your program, your money.
+* All payment is automatically transfer to your personal account on the fly. No money to lose even database is stolen.
 
-The standalone program is a battery included solution. Developer just need to call it's http api, show payment information to client, program will visit callback url when your client paid cryptocurrency and cryptocurrency will be automatically transferred to your account.
+Developer call to localhost http api, show payment information to client, program will visit webhook when client paid cryptocurrency.
 
 ATTENTION: If you ever use code on or before tag v0.0.1, the current master branch is not backward compatible.
 
@@ -202,7 +205,7 @@ Currency list
 |LTC|Litecoin|-|
 
 #### Query payment status
-fetch the payment status by visit localhost:8080/payment with parameter reqid
+fetch the payment status by visit localhost:8080/charges with parameter charge_id
 
 Example:
 ```shell
@@ -314,7 +317,8 @@ total 20 account will send all balance to admin
 3. Bitcoin/USDT: 60 minutes
 4. Litecoin/Ethererum/DOGE: 120 minutes
 
-Why so long? Because it is Mixin Network confirmation time for different asset. You can not change now.
+#### What is confirmation time, why need to care about it?
+A cryptocurrency transaction created by your client need to be confirmed by network, Bitcoin network need long time to confirm, other blockchain need less time.
 
 ### What kind of currency can be supported
 All asset supported by Mixin Network:
