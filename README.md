@@ -270,7 +270,7 @@ The payment address is a deposit address in cryptocurrency world, so user can de
 
 
 #### payment notification webhook
-The program will visit following url when payment is finished.
+The program will visit webhook url when user paid and confirmed by program. 
 ```json
 "http://127.0.0.1"+webhookurl
 ```
