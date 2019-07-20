@@ -1040,10 +1040,8 @@ func main() {
 								resp.Paidstatus = 1
 							}
 
-							if resp.Paidstatus == 2 {
-								callback_response.Resp = resp
-								payment_received_asset_chan <- callback_response
-							}
+							callback_response.Resp = resp
+							payment_received_asset_chan <- callback_response
 						}
 					}
 				}
