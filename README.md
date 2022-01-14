@@ -2,7 +2,7 @@
 <a href="README_CN.md"><img src="https://img.shields.io/badge/language-中文文档-red.svg?longCache=true&style=flat-square"></a>
 </p>
 
-# Cryptocurrency payment plugin
+# Cryptocurrency payment plugin(No maintainer NOW, No response if you ask question)
 
 Accept cryptocurrency payment can be painless, free and secure. 
 * No need to setup full Bitcoin/Ethereum/EOS full node(it cost your hundreds gigabytes).
